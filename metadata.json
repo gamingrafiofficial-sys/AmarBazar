@@ -1,0 +1,6 @@
+{
+  "name": "AmarBazaar - Local Marketplace & Delivery Management",
+  "description": "Hyperlocal marketplace and own-fleet delivery management platform for Bangladesh with role-based dashboards, Cash on Delivery ledger, distance-based delivery pricing, and bilingual English/Bengali interface.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,100 @@
+{
+  "customers": [
+    {
+      "id": "cust-497506",
+      "name": "হাসান মাহমুদ",
+      "phone": "01955667788",
+      "address": "বক্তারপুর, কালীগঞ্জ",
+      "password": "secretpassword",
+      "areaId": "kaliganj",
+      "createdAt": "2026-10-18T12:28:17.506Z"
+    },
+    {
+      "id": "cust-demo-1",
+      "name": "তানভীর আহমেদ",
+      "phone": "01711002233",
+      "password": "password123",
+      "address": "কালীগঞ্জ বাজার রোড, কালীগঞ্জ, গাজীপুর",
+      "areaId": "kaliganj",
+      "createdAt": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "cust-demo-2",
+      "name": "রাফসান করিম",
+      "phone": "01811223344",
+      "password": "password123",
+      "address": "কাপাসিয়া সদর মোড়, গাজীপুর",
+      "areaId": "kapasia",
+      "createdAt": "2026-01-02T00:00:00Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "AB-10024",
+      "customerId": "cust-demo",
+      "shopId": "admin-store",
+      "marketId": "kaliganj",
+      "riderId": "rider-01",
+      "riderName": "কামরুল হাসান (কালীগঞ্জ রাইডার)",
+      "riderPhone": "01719998877",
+      "acceptedAt": "2026-10-18T11:58:11.368Z",
+      "items": [
+        {
+          "productId": "prod-miniket-rice",
+          "nameEn": "Premium Miniket Rice (5kg Pack)",
+          "nameBn": "প্রিমিয়াম মিনিকেট চাল (৫ কেজি বস্তা)",
+          "price": 360,
+          "unit": "pack",
+          "quantity": 1,
+          "lineTotal": 360
+        },
+        {
+          "productId": "prod-layer-dim",
+          "nameEn": "Farm Brown Layer Eggs (1 Dozen / 12 pcs)",
+          "nameBn": "খামারের লাল লেয়ার মুরগির ডিম (১ ডজন / ১২টি)",
+          "price": 150,
+          "unit": "dozen",
+          "quantity": 1,
+          "lineTotal": 150
+        }
+      ],
+      "subtotal": 510,
+      "deliveryFee": 40,
+      "totalAmount": 550,
+      "roadDistanceKm": 1.8,
+      "pricingRuleVersion": "v1.0-bd-standard",
+      "paymentMethod": "cod",
+      "paymentStatus": "pending",
+      "orderStatus": "picked_up",
+      "customerName": "তানভীর আহমেদ",
+      "customerPhone": "01711002233",
+      "deliveryAddress": "কালীগঞ্জ বাজার রোড, কালীগঞ্জ, গাজীপুর",
+      "deliveryLat": 23.9925,
+      "deliveryLng": 90.5658,
+      "createdAt": "2026-10-18T11:28:11.368Z",
+      "updatedAt": "2026-10-18T11:58:11.368Z"
+    }
+  ],
+  "riders": [
+    {
+      "id": "rider-01",
+      "name": "কামরুল হাসান (কালীগঞ্জ রাইডার)",
+      "phone": "01719998877",
+      "password": "123",
+      "area": "kaliganj",
+      "isOnline": true,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "rider-02",
+      "name": "সাকিব চৌধুরী (কাপাসিয়া রাইডার)",
+      "phone": "01822334455",
+      "password": "123",
+      "area": "kapasia",
+      "isOnline": true,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

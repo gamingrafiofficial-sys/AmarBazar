@@ -1,0 +1,247 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'anonymous' || request.auth.token.email == 'gamingrafi.official@gmail.com');
+    }
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'gamingrafi.official@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Helper: User validation
+    function isValidUser(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.role in ['customer', 'shopkeeper', 'rider', 'admin'] &&
+             data.isActive is bool;
+    }
+
+    // Helper: Product validation
+    function isValidProduct(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.shopId is string && isValidId(data.shopId) &&
+             data.marketId is string && isValidId(data.marketId) &&
+             data.nameEn is string && data.nameEn.size() > 0 && data.nameEn.size() <= 150 &&
+             data.nameBn is string && data.nameBn.size() > 0 && data.nameBn.size() <= 150 &&
+             data.price is number && data.price >= 0 &&
+             data.unit in ['kg', 'gm', 'litre', 'ml', 'piece', 'dozen', 'pack', 'bundle'] &&
+             data.stock is number && data.stock >= 0 &&
+             data.isAvailable is bool;
+    }
+
+    // Helper: Order validation
+    function isValidOrder(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.customerId is string && data.customerId == request.auth.uid &&
+             data.shopId is string && isValidId(data.shopId) &&
+             data.subtotal is number && data.subtotal >= 0 &&
+             data.deliveryFee is number && data.deliveryFee >= 0 &&
+             data.totalAmount is number && data.totalAmount >= data.subtotal &&
+             data.roadDistanceKm is number && data.roadDistanceKm >= 0 &&
+             data.paymentMethod == 'cod' &&
+             data.paymentStatus in ['pending', 'collected', 'deposited', 'failed'] &&
+             data.orderStatus in [
+               'pending_shop_confirmation', 'shop_confirmed', 'shop_rejected',
+               'rider_assigned', 'picked_up', 'out_for_delivery', 'delivered',
+               'delivery_failed', 'cancelled', 'returned'
+             ] &&
+             data.deliveryAddress is string && data.deliveryAddress.size() > 0 && data.deliveryAddress.size() <= 500;
+    }
+
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+                    isValidUser(incoming()) &&
+                    incoming().role == 'customer'; // Default role on client creation; other roles promoted by admin
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId &&
+          isValidUser(incoming()) &&
+          incoming().role == existing().role && // Prevent self-elevation
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'defaultAddress', 'marketId', 'updatedAt'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // --- ADMINS COLLECTION ---
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- MARKETS COLLECTION ---
+    match /markets/{marketId} {
+      allow get, list: if true; // Public directory of service hubs
+      allow write: if isAdmin();
+    }
+
+    // --- SHOPS COLLECTION ---
+    match /shops/{shopId} {
+      allow get, list: if true; // Public directory of approved shops
+      allow create: if isSignedIn() && isValidId(shopId) && (isAdmin() || incoming().ownerId == request.auth.uid);
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          existing().ownerId == request.auth.uid &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().isApproved == existing().isApproved && // Shopkeeper cannot approve themselves
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'nameEn', 'nameBn', 'category', 'addressEn', 'addressBn',
+            'phone', 'openingTime', 'closingTime', 'isOpen', 'image', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // --- CATEGORIES COLLECTION ---
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- PRODUCTS COLLECTION ---
+    match /products/{productId} {
+      allow get, list: if true; // Public catalog browsing
+      allow create: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && (
+        isAdmin() ||
+        (
+          // Must own the shop
+          exists(/databases/$(database)/documents/shops/$(incoming().shopId)) &&
+          get(/databases/$(database)/documents/shops/$(incoming().shopId)).data.ownerId == request.auth.uid
+        )
+      );
+      allow update: if isSignedIn() && isValidProduct(incoming()) && (
+        isAdmin() ||
+        (
+          existing().shopId == incoming().shopId &&
+          exists(/databases/$(database)/documents/shops/$(existing().shopId)) &&
+          get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'nameEn', 'nameBn', 'descriptionEn', 'descriptionBn',
+            'price', 'unit', 'stock', 'isAvailable', 'imageUrl', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        (
+          exists(/databases/$(database)/documents/shops/$(existing().shopId)) &&
+          get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid
+        )
+      );
+    }
+
+    // --- ORDERS COLLECTION ---
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.customerId == request.auth.uid ||
+        (resource.data.shopId != null && exists(/databases/$(database)/documents/shops/$(resource.data.shopId)) && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerId == request.auth.uid) ||
+        resource.data.riderId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.customerId == request.auth.uid ||
+        (resource.data.shopId != null && exists(/databases/$(database)/documents/shops/$(resource.data.shopId)) && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerId == request.auth.uid) ||
+        resource.data.riderId == request.auth.uid
+      );
+      allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming());
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        // Customer cancelling before shop confirmation
+        (
+          existing().customerId == request.auth.uid &&
+          existing().orderStatus == 'pending_shop_confirmation' &&
+          incoming().orderStatus == 'cancelled' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'cancellationReason', 'updatedAt'])
+        ) ||
+        // Shopkeeper confirming or rejecting
+        (
+          exists(/databases/$(database)/documents/shops/$(existing().shopId)) &&
+          get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid &&
+          existing().orderStatus == 'pending_shop_confirmation' &&
+          incoming().orderStatus in ['shop_confirmed', 'shop_rejected'] &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'rejectionReason', 'updatedAt'])
+        ) ||
+        // Assigned Rider updating delivery progress
+        (
+          existing().riderId == request.auth.uid &&
+          incoming().riderId == existing().riderId &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'orderStatus', 'paymentStatus', 'failureReason', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // --- DELIVERIES COLLECTION ---
+    match /deliveries/{deliveryId} {
+      allow get, list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.riderId == request.auth.uid
+      );
+      allow create: if isAdmin();
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (
+          existing().riderId == request.auth.uid &&
+          incoming().riderId == existing().riderId &&
+          incoming().codAmountToCollect == existing().codAmountToCollect && // Cannot alter due amount
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'status', 'codAmountCollected', 'pickupTime', 'deliveryTime', 'failedReason', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // --- DELIVERY PRICING COLLECTION ---
+    match /deliveryPricing/{pricingId} {
+      allow get, list: if true; // Publicly readable for transparent fee formula
+      allow write: if isAdmin();
+    }
+
+    // --- LEDGER ENTRIES COLLECTION (IMMUTABLE) ---
+    match /ledgerEntries/{ledgerId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin(); // Server/Admin only
+      allow update, delete: if false; // Strict Immutability!
+    }
+
+    // --- AUDIT LOGS ---
+    match /auditLogs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Immutable audit trail
+    }
+  }
+}

@@ -1,0 +1,280 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and contact information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["customer", "shopkeeper", "rider", "admin"] },
+        "defaultAddress": { "type": "string", "maxLength": 500 },
+        "marketId": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "Market": {
+      "title": "Market",
+      "description": "Local market or bazaar hub in Bangladesh (e.g., Kawran Bazar, Mirpur 1)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nameEn": { "type": "string", "maxLength": 100 },
+        "nameBn": { "type": "string", "maxLength": 100 },
+        "areaEn": { "type": "string", "maxLength": 100 },
+        "areaBn": { "type": "string", "maxLength": 100 },
+        "cityEn": { "type": "string", "maxLength": 100 },
+        "cityBn": { "type": "string", "maxLength": 100 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "radiusKm": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "nameEn", "nameBn", "lat", "lng", "isActive", "createdAt"]
+    },
+    "Shop": {
+      "title": "Shop",
+      "description": "Local vendor or shopkeeper store",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "marketId": { "type": "string", "maxLength": 128 },
+        "nameEn": { "type": "string", "maxLength": 150 },
+        "nameBn": { "type": "string", "maxLength": 150 },
+        "category": { "type": "string", "maxLength": 64 },
+        "addressEn": { "type": "string", "maxLength": 300 },
+        "addressBn": { "type": "string", "maxLength": 300 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "phone": { "type": "string", "maxLength": 20 },
+        "openingTime": { "type": "string", "maxLength": 10 },
+        "closingTime": { "type": "string", "maxLength": 10 },
+        "isApproved": { "type": "boolean" },
+        "isOpen": { "type": "boolean" },
+        "commissionRate": { "type": "number" },
+        "image": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "marketId", "nameEn", "nameBn", "category", "isApproved", "isOpen", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "nameEn": { "type": "string", "maxLength": 100 },
+        "nameBn": { "type": "string", "maxLength": 100 },
+        "icon": { "type": "string", "maxLength": 50 },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "nameEn", "nameBn", "isActive"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Shopkeeper merchandise item with inventory and price in BDT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "marketId": { "type": "string", "maxLength": 128 },
+        "categoryId": { "type": "string", "maxLength": 64 },
+        "nameEn": { "type": "string", "maxLength": 150 },
+        "nameBn": { "type": "string", "maxLength": 150 },
+        "descriptionEn": { "type": "string", "maxLength": 1000 },
+        "descriptionBn": { "type": "string", "maxLength": 1000 },
+        "price": { "type": "number" },
+        "unit": { "type": "string", "enum": ["kg", "gm", "litre", "ml", "piece", "dozen", "pack", "bundle"] },
+        "stock": { "type": "number" },
+        "isAvailable": { "type": "boolean" },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "shopId", "marketId", "nameEn", "nameBn", "price", "unit", "stock", "isAvailable", "createdAt", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase from a single shop with COD and road delivery distance snapshots",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "marketId": { "type": "string", "maxLength": 128 },
+        "riderId": { "type": "string", "maxLength": 128 },
+        "subtotal": { "type": "number" },
+        "deliveryFee": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "roadDistanceKm": { "type": "number" },
+        "pricingRuleVersion": { "type": "string", "maxLength": 64 },
+        "paymentMethod": { "type": "string", "enum": ["cod"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "collected", "deposited", "failed"] },
+        "orderStatus": {
+          "type": "string",
+          "enum": [
+            "pending_shop_confirmation",
+            "shop_confirmed",
+            "shop_rejected",
+            "rider_assigned",
+            "picked_up",
+            "out_for_delivery",
+            "delivered",
+            "delivery_failed",
+            "cancelled",
+            "returned"
+          ]
+        },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 20 },
+        "deliveryAddress": { "type": "string", "maxLength": 500 },
+        "deliveryLat": { "type": "number" },
+        "deliveryLng": { "type": "number" },
+        "rejectionReason": { "type": "string", "maxLength": 300 },
+        "failureReason": { "type": "string", "maxLength": 300 },
+        "cancellationReason": { "type": "string", "maxLength": 300 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": [
+        "id",
+        "customerId",
+        "shopId",
+        "subtotal",
+        "deliveryFee",
+        "totalAmount",
+        "roadDistanceKm",
+        "paymentMethod",
+        "paymentStatus",
+        "orderStatus",
+        "deliveryAddress",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Delivery": {
+      "title": "Delivery",
+      "description": "Rider task assignment and execution record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "riderId": { "type": "string", "maxLength": 128 },
+        "shopId": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["assigned", "arrived_at_shop", "picked_up", "out_for_delivery", "delivered", "failed"] },
+        "codAmountToCollect": { "type": "number" },
+        "codAmountCollected": { "type": "number" },
+        "riderPayout": { "type": "number" },
+        "pickupTime": { "type": "string" },
+        "deliveryTime": { "type": "string" },
+        "failedReason": { "type": "string", "maxLength": 300 },
+        "handoverStatus": { "type": "string", "enum": ["pending", "verified", "deposited"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "orderId", "riderId", "shopId", "status", "codAmountToCollect", "handoverStatus", "createdAt", "updatedAt"]
+    },
+    "DeliveryPricing": {
+      "title": "DeliveryPricing",
+      "description": "Backend delivery fee formula configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "version": { "type": "string", "maxLength": 64 },
+        "baseFee": { "type": "number" },
+        "includedKm": { "type": "number" },
+        "perKmFee": { "type": "number" },
+        "maxDeliveryDistanceKm": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "version", "baseFee", "includedKm", "perKmFee", "maxDeliveryDistanceKm", "isActive"]
+    },
+    "LedgerEntry": {
+      "title": "LedgerEntry",
+      "description": "Immutable double-entry transaction record for COD, shop payables, commissions, and rider payouts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["cod_collection", "shop_payable", "platform_commission", "delivery_fee_revenue", "rider_payout", "rider_handover", "shop_settlement"] },
+        "debitAccount": { "type": "string", "maxLength": 64 },
+        "creditAccount": { "type": "string", "maxLength": 64 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 8 },
+        "referenceId": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "orderId", "type", "debitAccount", "creditAccount", "amount", "currency", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Administrative audit trail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "resource": { "type": "string", "maxLength": 100 },
+        "resourceId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "action", "resource", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile documents mapped by Auth UID"
+    },
+    "/markets/{marketId}": {
+      "schema": { "$ref": "#/entities/Market" },
+      "description": "List of geographical market hubs in Bangladesh"
+    },
+    "/shops/{shopId}": {
+      "schema": { "$ref": "#/entities/Shop" },
+      "description": "Registered local shops"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Product inventory documents"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders"
+    },
+    "/deliveries/{deliveryId}": {
+      "schema": { "$ref": "#/entities/Delivery" },
+      "description": "Delivery tasks assigned to riders"
+    },
+    "/deliveryPricing/{pricingId}": {
+      "schema": { "$ref": "#/entities/DeliveryPricing" },
+      "description": "Delivery pricing policies"
+    },
+    "/ledgerEntries/{ledgerId}": {
+      "schema": { "$ref": "#/entities/LedgerEntry" },
+      "description": "Immutable financial entries"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Admin and compliance audit logs"
+    }
+  }
+}
