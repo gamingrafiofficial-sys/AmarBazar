@@ -30,6 +30,46 @@
   ],
   "orders": [
     {
+      "id": "AB-905160",
+      "customerId": "cust-test-1",
+      "shopId": "admin-store",
+      "marketId": "kaliganj",
+      "thanaId": "kaliganj",
+      "thanaNameBn": "কালীগঞ্জ",
+      "unionId": "baktarpur",
+      "unionNameBn": "বক্তারপুর ইউনিয়ন",
+      "items": [
+        {
+          "productId": "prod-miniket-rice",
+          "nameEn": "Premium Miniket Rice (5kg Pack)",
+          "nameBn": "প্রিমিয়াম মিনিকেট চাল (৫ কেজি বস্তা)",
+          "price": 360,
+          "unit": "pack",
+          "quantity": 1,
+          "lineTotal": 360
+        }
+      ],
+      "subtotal": 360,
+      "deliveryFee": 50,
+      "totalAmount": 410,
+      "roadDistanceKm": 2.86,
+      "pricingRuleVersion": "v1.0-bd-standard",
+      "paymentMethod": "cod",
+      "paymentStatus": "pending",
+      "orderStatus": "pending_shop_confirmation",
+      "customerName": "হাসান মাহমুদ",
+      "customerPhone": "01711223344",
+      "deliveryAddress": "বক্তারপুর পূর্বপাড়া, কালীগঞ্জ, গাজীপুর",
+      "deliveryLat": 23.9925,
+      "deliveryLng": 90.5658,
+      "shopNameEn": "AmarBazaar Express (Gazipur)",
+      "shopNameBn": "আমারবাজার এক্সপ্রেস (গাজীপুর)",
+      "shopAddressEn": "Kaliganj & Kapasia, Gazipur",
+      "notes": "",
+      "createdAt": "2026-10-18T12:51:45.160Z",
+      "updatedAt": "2026-10-18T12:51:45.160Z"
+    },
+    {
       "id": "AB-10024",
       "customerId": "cust-demo",
       "shopId": "admin-store",
@@ -76,6 +116,22 @@
     }
   ],
   "riders": [
+    {
+      "id": "rider-3656",
+      "name": "মোঃ সুজন আহমেদ",
+      "phone": "01755667788",
+      "password": "123",
+      "area": "kaliganj",
+      "thanaId": "kaliganj",
+      "assignedUnionIds": [
+        "baktarpur",
+        "moktarpur",
+        "tumulia"
+      ],
+      "isOnline": true,
+      "isActive": true,
+      "createdAt": "2026-10-18T12:51:33.656Z"
+    },
     {
       "id": "rider-01",
       "name": "কামরুল হাসান (কালীগঞ্জ রাইডার)",

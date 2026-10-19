@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
-import { Market, Order } from '../types';
+import { Market, Order, UnionArea } from '../types';
+import { SEED_UNIONS, SEED_MARKETS } from '../data/seedData';
 import {
   ShoppingCart,
   Trash2,
@@ -19,6 +20,9 @@ import {
   Banknote,
   FileText,
   AlertCircle,
+  Building,
+  Lock,
+  LogIn,
 } from 'lucide-react';
 
 interface CartPageProps {
@@ -26,6 +30,10 @@ interface CartPageProps {
   onContinueShopping: () => void;
   onOrderSuccess: (order: Order) => void;
   customerProfile?: any;
+  markets?: Market[];
+  unions?: UnionArea[];
+  initialUnionId?: string;
+  onRequireLogin?: () => void;
 }
 
 export const CartPage: React.FC<CartPageProps> = ({
@@ -33,23 +41,44 @@ export const CartPage: React.FC<CartPageProps> = ({
   onContinueShopping,
   onOrderSuccess,
   customerProfile,
+  markets = SEED_MARKETS,
+  unions = SEED_UNIONS,
+  initialUnionId,
+  onRequireLogin,
 }) => {
   const { language, formatBDT } = useLanguage();
   const { items, subtotal, updateQuantity, removeFromCart, clearCart } = useCart();
   const { role } = useAuth();
 
-  const [customerName, setCustomerName] = useState(
-    customerProfile?.name || 'তানভীর আহমেদ'
-  );
-  const [customerPhone, setCustomerPhone] = useState(
-    customerProfile?.phone || '01711002233'
-  );
-  const [deliveryAddress, setDeliveryAddress] = useState(
-    customerProfile?.address || `${currentArea.nameBn} বাজার এলাকা, ${currentArea.cityBn}`
-  );
+  // Selected Thana and Union for the delivery
+  const [selectedThanaId, setSelectedThanaId] = useState<string>(currentArea?.id || 'kaliganj');
+  const availableUnions = unions.filter((u) => u.thanaId === selectedThanaId);
+  const [selectedUnionId, setSelectedUnionId] = useState<string>(() => {
+    if (initialUnionId && initialUnionId !== 'all') {
+      const match = unions.find((u) => u.id === initialUnionId);
+      if (match && match.thanaId === (currentArea?.id || 'kaliganj')) return initialUnionId;
+    }
+    return availableUnions[0]?.id || 'baktarpur';
+  });
+
+  const selectedThana = markets.find((m) => m.id === selectedThanaId) || currentArea;
+  const selectedUnion = unions.find((u) => u.id === selectedUnionId) || availableUnions[0];
+
+  const [customerName, setCustomerName] = useState(customerProfile?.name || '');
+  const [customerPhone, setCustomerPhone] = useState(customerProfile?.phone || '');
+  const [deliveryAddress, setDeliveryAddress] = useState(customerProfile?.address || '');
   const [orderNotes, setOrderNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Sync inputs when customerProfile is loaded or changes
+  useEffect(() => {
+    if (customerProfile) {
+      if (customerProfile.name) setCustomerName(customerProfile.name);
+      if (customerProfile.phone) setCustomerPhone(customerProfile.phone);
+      if (customerProfile.address) setDeliveryAddress(customerProfile.address);
+    }
+  }, [customerProfile]);
 
   // Road distance and delivery fee calculation (Base 30 + 10 per additional km)
   const roadDistanceKm = 2.4;
@@ -59,6 +88,19 @@ export const CartPage: React.FC<CartPageProps> = ({
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    // CRITICAL: Block order if customer is not logged in
+    if (!customerProfile) {
+      setErrorMessage(
+        language === 'bn'
+          ? 'লগইন না করে অর্ডার করা সম্ভব নয়। অনুগ্রহ করে প্রথমে লগইন বা রেজিস্ট্রেশন করুন।'
+          : 'You must be logged in to place an order. Please log in or register first.'
+      );
+      if (onRequireLogin) {
+        onRequireLogin();
+      }
+      return;
+    }
 
     if (items.length === 0) {
       setErrorMessage(language === 'bn' ? 'আপনার কার্ট খালি রয়েছে।' : 'Your cart is empty.');
@@ -81,15 +123,20 @@ export const CartPage: React.FC<CartPageProps> = ({
       const payload = {
         customerId: customerProfile?.id || `cust-${Date.now()}`,
         shopId: 'admin-store',
+        marketId: selectedThanaId,
+        thanaId: selectedThanaId,
+        thanaNameBn: selectedThana?.nameBn || currentArea.nameBn,
+        unionId: selectedUnionId,
+        unionNameBn: selectedUnion?.nameBn || 'সদর',
         items: items.map((i) => ({
           productId: i.product.id,
           quantity: i.quantity,
         })),
         customerName,
         customerPhone,
-        deliveryAddress,
-        deliveryLat: currentArea.lat,
-        deliveryLng: currentArea.lng,
+        deliveryAddress: `${deliveryAddress} (${selectedUnion?.nameBn || ''}, ${selectedThana?.nameBn || ''})`,
+        deliveryLat: selectedThana?.lat || currentArea.lat,
+        deliveryLng: selectedThana?.lng || currentArea.lng,
         notes: orderNotes,
       };
 
@@ -108,7 +155,11 @@ export const CartPage: React.FC<CartPageProps> = ({
           id: `AB-${Date.now().toString().slice(-6)}`,
           customerId: payload.customerId,
           shopId: 'admin-store',
-          marketId: currentArea.id,
+          marketId: selectedThanaId,
+          thanaId: selectedThanaId,
+          thanaNameBn: selectedThana?.nameBn || currentArea.nameBn,
+          unionId: selectedUnionId,
+          unionNameBn: selectedUnion?.nameBn || 'সদর',
           items: items.map((i) => ({
             productId: i.product.id,
             nameEn: i.product.nameEn,
@@ -128,9 +179,9 @@ export const CartPage: React.FC<CartPageProps> = ({
           orderStatus: 'pending_shop_confirmation',
           customerName,
           customerPhone,
-          deliveryAddress,
-          deliveryLat: currentArea.lat,
-          deliveryLng: currentArea.lng,
+          deliveryAddress: payload.deliveryAddress,
+          deliveryLat: payload.deliveryLat,
+          deliveryLng: payload.deliveryLng,
           notes: orderNotes,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -285,9 +336,42 @@ export const CartPage: React.FC<CartPageProps> = ({
 
           {/* RIGHT COLUMN: Customer Details, Delivery Fee & Checkout Form (5 cols) */}
           <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-xs">
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 pb-3 border-b border-slate-100 mb-4">
-              {language === 'bn' ? 'ডেলিভারি ঠিকানা ও অর্ডার তথ্য' : 'Delivery Details & Checkout'}
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 pb-3 border-b border-slate-100 mb-4 flex items-center justify-between">
+              <span>{language === 'bn' ? 'ডেলিভারি ঠিকানা ও অর্ডার তথ্য' : 'Delivery Details & Checkout'}</span>
+              {!customerProfile && (
+                <span className="text-[11px] font-bold text-amber-700 bg-amber-100/80 px-2.5 py-1 rounded-full flex items-center gap-1">
+                  <Lock className="w-3 h-3" />
+                  <span>লগইন আবশ্যক</span>
+                </span>
+              )}
             </h2>
+
+            {/* Prominent Login Warning if user is not logged in */}
+            {!customerProfile && (
+              <div className="mb-4 p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300/80 rounded-2xl text-amber-950">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-2 bg-amber-200/80 rounded-xl text-amber-900 shrink-0 mt-0.5">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-extrabold text-xs sm:text-sm text-amber-950">
+                      লগইন না করে অর্ডার করা যাবে না
+                    </h3>
+                    <p className="text-[11px] text-amber-850 mt-0.5 leading-relaxed">
+                      নিরাপদ ডেলিভারি ও অর্ডার ট্র্যাকিংয়ের জন্য আপনার একাউন্টে লগইন করুন অথবা ২ মিনিটে নতুন একাউন্ট খুলুন।
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onRequireLogin}
+                      className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>লগইন বা রেজিস্ট্রেশন করুন</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handlePlaceOrder} className="space-y-3.5 text-xs">
               <div>
@@ -298,7 +382,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="যেমন: তানভীর আহমেদ"
+                  placeholder={language === 'bn' ? 'লগইন করলে স্বয়ংক্রিয়ভাবে নাম আসবে' : 'Your Name'}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
@@ -320,10 +404,56 @@ export const CartPage: React.FC<CartPageProps> = ({
                 />
               </div>
 
+              {/* Thana and Union Selector */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 flex items-center gap-1 mb-1">
+                    <Building className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{language === 'bn' ? 'থানা' : 'Thana'} <span className="text-rose-500">*</span></span>
+                  </label>
+                  <select
+                    value={selectedThanaId}
+                    onChange={(e) => {
+                      const newThana = e.target.value;
+                      setSelectedThanaId(newThana);
+                      const filtered = unions.filter((u) => u.thanaId === newThana);
+                      if (filtered.length > 0) {
+                        setSelectedUnionId(filtered[0].id);
+                      }
+                    }}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-hidden focus:border-emerald-600 bg-white"
+                  >
+                    {markets.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nameBn} ({m.cityBn})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 flex items-center gap-1 mb-1">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{language === 'bn' ? 'ইউনিয়ন' : 'Union'} <span className="text-rose-500">*</span></span>
+                  </label>
+                  <select
+                    value={selectedUnionId}
+                    onChange={(e) => setSelectedUnionId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-hidden focus:border-emerald-600 bg-emerald-50/50 text-emerald-950"
+                  >
+                    {availableUnions.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.nameBn}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="font-semibold text-slate-700 flex items-center gap-1.5 mb-1">
                   <MapPin className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>{language === 'bn' ? 'বিস্তারিত ডেলিভারি ঠিকানা' : 'Delivery Address'}</span>
+                  <span>{language === 'bn' ? 'গ্রাম / বাড়ি / রোড নম্বর' : 'Village / House / Road'} <span className="text-rose-500">*</span></span>
                 </label>
                 <textarea
                   rows={2}
@@ -392,19 +522,30 @@ export const CartPage: React.FC<CartPageProps> = ({
                 </div>
               </div>
 
-              {/* Submit Order */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition-all shadow-md shadow-emerald-700/20 flex items-center justify-center space-x-2 mt-4 active:scale-98"
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>
-                  {isSubmitting
-                    ? 'অর্ডার প্রসেস হচ্ছে...'
-                    : `অর্ডার নিশ্চিত করুন (${formatBDT(totalAmount)})`}
-                </span>
-              </button>
+              {/* Submit Order or Require Login */}
+              {!customerProfile ? (
+                <button
+                  type="button"
+                  onClick={onRequireLogin}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition-all shadow-md shadow-amber-600/25 flex items-center justify-center space-x-2 mt-4 active:scale-98"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>🔒 অর্ডার সম্পন্ন করতে প্রথমে লগইন করুন</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition-all shadow-md shadow-emerald-700/20 flex items-center justify-center space-x-2 mt-4 active:scale-98"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>
+                    {isSubmitting
+                      ? 'অর্ডার প্রসেস হচ্ছে...'
+                      : `অর্ডার নিশ্চিত করুন (${formatBDT(totalAmount)})`}
+                  </span>
+                </button>
+              )}
             </form>
           </div>
         </div>

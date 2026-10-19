@@ -4,6 +4,7 @@ import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
 import { getNavigationUrl } from '../../lib/maps';
 import { calculateOrderFinancialSplit } from '../../lib/financialLedger';
+import { SEED_UNIONS } from '../../data/seedData';
 import {
   Bike,
   MapPin,
@@ -18,6 +19,7 @@ import {
   ShieldCheck,
   Send,
   BellRing,
+  Layers,
 } from 'lucide-react';
 
 interface RiderDashboardProps {
@@ -44,12 +46,25 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [handoverAmount, setHandoverAmount] = useState<number>(0);
 
-  // Available new orders needing delivery (unassigned & not delivered)
-  const incomingAvailableOrders = allOrders.filter(
-    (o) =>
+  // Available new orders strictly routed by customer's union
+  // "কোনো Castumer যেই এরিয়া (ইউনিয়ন) সিলেক্ট করে অডার Submit করবে শুধু সেই এরিয়ার Rider কাছে অডার যাবে"
+  const incomingAvailableOrders = allOrders.filter((o) => {
+    const isUnassigned =
       (!o.riderId || o.riderId === '') &&
-      ['pending_shop_confirmation', 'shop_confirmed'].includes(o.orderStatus)
-  );
+      ['pending_shop_confirmation', 'shop_confirmed'].includes(o.orderStatus);
+    if (!isUnassigned) return false;
+
+    // If rider has assigned unions, check if order belongs to one of those unions
+    if (rider.assignedUnionIds && rider.assignedUnionIds.length > 0) {
+      if (o.unionId) {
+        return rider.assignedUnionIds.includes(o.unionId);
+      }
+      return o.thanaId === rider.area || o.marketId === rider.area;
+    }
+
+    // Default to matching thana/area
+    return o.thanaId === rider.area || o.marketId === rider.area;
+  });
 
   // Deliveries accepted / active for this rider
   const myActiveDeliveries = allOrders.filter(
@@ -129,11 +144,41 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 রাইডার আইডি: {rider.id}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-              <Phone className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="font-mono">{rider.phone}</span>
-              <span>• এরিয়া: {rider.area}</span>
-            </p>
+            <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="font-mono">{rider.phone}</span>
+              </span>
+              <span>•</span>
+              <span className="font-bold text-slate-700">
+                থানা: {rider.area === 'kapasia' ? 'কাপাসিয়া' : 'কালীগঞ্জ'}
+              </span>
+            </div>
+
+            {/* Assigned Unions Badges */}
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              <span className="text-[11px] font-bold text-slate-600 mr-1 flex items-center gap-1">
+                <Layers className="w-3 h-3 text-emerald-700" />
+                <span>নির্ধারিত ইউনিয়ন ({rider.assignedUnionIds?.length || 0}টি):</span>
+              </span>
+              {rider.assignedUnionIds && rider.assignedUnionIds.length > 0 ? (
+                rider.assignedUnionIds.map((uId) => {
+                  const uObj = SEED_UNIONS.find((u) => u.id === uId);
+                  return (
+                    <span
+                      key={uId}
+                      className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    >
+                      {uObj ? uObj.nameBn : uId}
+                    </span>
+                  );
+                })
+              ) : (
+                <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  সকল ইউনিয়ন
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -220,10 +265,18 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   className="bg-white rounded-2xl border-2 border-amber-300 p-5 shadow-sm flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
-                      <span className="font-mono text-xs font-bold text-slate-800">
-                        #{order.id}
-                      </span>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-3 flex-wrap gap-1">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-mono text-xs font-bold text-slate-800">
+                          #{order.id}
+                        </span>
+                        {order.unionNameBn && (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                            <MapPin className="w-2.5 h-2.5" />
+                            {order.unionNameBn}
+                          </span>
+                        )}
+                      </div>
                       <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2 py-0.5 rounded-md">
                         নগদ আদায়: {formatBDT(order.totalAmount)}
                       </span>

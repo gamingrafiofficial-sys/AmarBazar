@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LanguageProvider, useLanguage } from './hooks/useLanguage';
 import { AuthProvider, useAuth } from './hooks/useAuth';
-import { CartProvider } from './hooks/useCart';
+import { CartProvider, useCart } from './hooks/useCart';
 import { Navbar } from './components/common/Navbar';
 import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { HeroSlider } from './components/customer/HeroSlider';
@@ -21,6 +21,7 @@ import {
   SEED_CATEGORIES,
   SEED_ORDERS,
   SEED_RIDERS,
+  SEED_UNIONS,
 } from './data/seedData';
 import {
   Market,
@@ -29,6 +30,7 @@ import {
   DeliveryRiderAccount,
   CustomerAccount,
   OrderStatus,
+  UnionArea,
 } from './types';
 import { Search, MapPin } from 'lucide-react';
 
@@ -37,10 +39,15 @@ type PageView = 'catalog' | 'product_view' | 'cart' | 'orders' | 'login' | 'prof
 function MarketplaceMain() {
   const { language } = useLanguage();
   const { role, setRole } = useAuth();
+  const { items } = useCart();
 
   // Dynamic Markets / Areas (Admin Controlled, Default Kaliganj & Kapasia in Gazipur)
   const [markets, setMarkets] = useState<Market[]>(SEED_MARKETS);
   const [selectedAreaId, setSelectedAreaId] = useState<string>('kaliganj');
+
+  // Dynamic Unions (Admin & Customer controlled)
+  const [unions, setUnions] = useState<UnionArea[]>(SEED_UNIONS);
+  const [selectedUnionId, setSelectedUnionId] = useState<string>('all');
 
   // Products (Admin-controlled only)
   const [products, setProducts] = useState<Product[]>(SEED_PRODUCTS);
@@ -56,6 +63,36 @@ function MarketplaceMain() {
   const [currentPage, setCurrentPage] = useState<PageView>('catalog');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
+  // Sync riders and orders from server on initialization
+  useEffect(() => {
+    const syncWithServer = async () => {
+      try {
+        const ridersRes = await fetch('/api/admin/riders');
+        if (ridersRes.ok) {
+          const rData = await ridersRes.json();
+          if (Array.isArray(rData.riders) && rData.riders.length > 0) {
+            setRegisteredRiders(rData.riders);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not sync riders from server:', e);
+      }
+
+      try {
+        const ordersRes = await fetch('/api/orders');
+        if (ordersRes.ok) {
+          const oData = await ordersRes.json();
+          if (Array.isArray(oData.orders) && oData.orders.length > 0) {
+            setOrders(oData.orders);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not sync orders from server:', e);
+      }
+    };
+    syncWithServer();
+  }, []);
+
   // Logged-in Customer Profile (Persistent)
   const [loggedInCustomer, setLoggedInCustomer] = useState<CustomerAccount | null>(() => {
     try {
@@ -69,8 +106,13 @@ function MarketplaceMain() {
   // Area Selection Modal
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
 
-  // Active Market
+  // Active Market & Selected Union
   const currentArea = markets.find((m) => m.id === selectedAreaId) || markets[0];
+  const selectedUnionObj = unions.find((u) => u.id === selectedUnionId);
+  const selectedAreaBadgeText =
+    selectedUnionId !== 'all' && selectedUnionObj
+      ? `${currentArea.nameBn} • ${selectedUnionObj.nameBn}`
+      : currentArea.nameBn;
 
   // Filtered Products for selected Area
   const areaProducts = products.filter(
@@ -230,13 +272,61 @@ function MarketplaceMain() {
   };
 
   // Admin Registers New Delivery Rider
-  const handleRegisterRider = (newRiderData: Omit<DeliveryRiderAccount, 'id' | 'createdAt'>) => {
+  const handleRegisterRider = async (newRiderData: Omit<DeliveryRiderAccount, 'id' | 'createdAt'>) => {
+    try {
+      const res = await fetch('/api/admin/riders/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRiderData),
+      });
+      const data = await res.json();
+      if (res.ok && data.rider) {
+        setRegisteredRiders((prev) => [
+          data.rider,
+          ...prev.filter((r) => r.phone !== data.rider.phone && r.id !== data.rider.id),
+        ]);
+        try {
+          const current = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
+          const updated = [data.rider, ...current.filter((r: any) => r.phone !== data.rider.phone)];
+          localStorage.setItem('amar_registered_riders', JSON.stringify(updated));
+        } catch {}
+        return;
+      }
+    } catch (err) {
+      console.warn('Network error registering rider on server:', err);
+    }
+
+    // Local fallback
     const rider: DeliveryRiderAccount = {
       ...newRiderData,
       id: `rider-${Date.now().toString().slice(-4)}`,
       createdAt: new Date().toISOString(),
     };
     setRegisteredRiders((prev) => [rider, ...prev]);
+    try {
+      const current = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
+      localStorage.setItem('amar_registered_riders', JSON.stringify([rider, ...current]));
+    } catch {}
+  };
+
+  // Admin Updates Rider Assigned Unions
+  const handleUpdateRiderUnions = async (riderId: string, assignedUnionIds: string[]) => {
+    setRegisteredRiders((prev) =>
+      prev.map((r) => (r.id === riderId ? { ...r, assignedUnionIds } : r))
+    );
+    if (activeRider && activeRider.id === riderId) {
+      setActiveRider((prev) => (prev ? { ...prev, assignedUnionIds } : null));
+    }
+
+    try {
+      await fetch('/api/admin/riders/update-unions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ riderId, assignedUnionIds }),
+      });
+    } catch (err) {
+      console.warn('Error syncing updated unions to server:', err);
+    }
   };
 
   // Admin Adds New Product
@@ -286,7 +376,7 @@ function MarketplaceMain() {
           setCurrentPage('catalog');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        selectedAreaName={language === 'bn' ? currentArea?.nameBn || 'কালীগঞ্জ' : currentArea?.nameEn || 'Kaliganj'}
+        selectedAreaName={selectedAreaBadgeText}
         onOpenAreaSelector={() => setIsAreaModalOpen(true)}
         loggedInCustomer={loggedInCustomer}
       />
@@ -302,11 +392,17 @@ function MarketplaceMain() {
                 {/* 2.1 SLIDEBAR (Image Carousel right under Navbar) */}
                 <HeroSlider />
 
-                {/* 2.2 AREA SELECTION (Right below Slidebar, Admin-Added Dynamic Areas) */}
+                {/* 2.2 AREA SELECTION (Right below Slidebar, Admin-Added Dynamic Areas & Unions) */}
                 <AreaSelector
                   markets={markets}
                   selectedAreaId={selectedAreaId}
-                  onSelectArea={(id) => setSelectedAreaId(id)}
+                  onSelectArea={(id) => {
+                    setSelectedAreaId(id);
+                    setSelectedUnionId('all');
+                  }}
+                  unions={unions}
+                  selectedUnionId={selectedUnionId}
+                  onSelectUnion={(uId) => setSelectedUnionId(uId)}
                 />
 
                 {/* 2.3 PRODUCT LIST FOR SELECTED AREA */}
@@ -396,6 +492,13 @@ function MarketplaceMain() {
               <CartPage
                 currentArea={currentArea}
                 customerProfile={loggedInCustomer}
+                markets={markets}
+                unions={unions}
+                initialUnionId={selectedUnionId}
+                onRequireLogin={() => {
+                  setCurrentPage('login');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 onContinueShopping={() => {
                   setCurrentPage('catalog');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -439,7 +542,11 @@ function MarketplaceMain() {
                     localStorage.setItem('amar_active_customer', JSON.stringify(customer));
                   } catch {}
                   setRole('customer');
-                  setCurrentPage('profile');
+                  if (items.length > 0) {
+                    setCurrentPage('cart');
+                  } else {
+                    setCurrentPage('profile');
+                  }
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
               />
@@ -491,7 +598,11 @@ function MarketplaceMain() {
                       localStorage.setItem('amar_active_customer', JSON.stringify(customer));
                     } catch {}
                     setRole('customer');
-                    setCurrentPage('profile');
+                    if (items.length > 0) {
+                      setCurrentPage('cart');
+                    } else {
+                      setCurrentPage('profile');
+                    }
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                 />
@@ -526,12 +637,14 @@ function MarketplaceMain() {
             markets={markets}
             categories={SEED_CATEGORIES}
             registeredRiders={registeredRiders}
+            unions={unions}
             onAddProduct={handleAddProduct}
             onDeleteProduct={handleDeleteProduct}
             onAddMarket={handleAddMarket}
             onDeleteMarket={handleDeleteMarket}
             onRegisterRider={handleRegisterRider}
             onAssignRider={handleAdminAssignRider}
+            onUpdateRiderUnions={handleUpdateRiderUnions}
           />
         )}
       </main>
@@ -563,11 +676,18 @@ function MarketplaceMain() {
         loggedInCustomer={loggedInCustomer}
       />
 
-      {/* Global Area Selector Dialog */}
+      {/* Global Area & Union Selector Dialog */}
       <MarketSelector
         markets={markets}
         selectedMarketId={selectedAreaId}
-        onSelectMarket={(id) => setSelectedAreaId(id)}
+        onSelectMarket={(id) => {
+          setSelectedAreaId(id);
+        }}
+        unions={unions}
+        selectedUnionId={selectedUnionId}
+        onSelectUnion={(uId) => {
+          setSelectedUnionId(uId);
+        }}
         isOpen={isAreaModalOpen}
         onClose={() => setIsAreaModalOpen(false)}
       />

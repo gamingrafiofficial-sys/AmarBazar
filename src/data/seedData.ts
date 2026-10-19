@@ -1,4 +1,4 @@
-import { Market, Category, Product, Order, DeliveryPricingPolicy, DeliveryRiderAccount, UserProfile, CustomerAccount } from '../types';
+import { Market, Category, Product, Order, DeliveryPricingPolicy, DeliveryRiderAccount, UserProfile, CustomerAccount, UnionArea } from '../types';
 
 export const ADMIN_CREDENTIALS = {
   email: 'youradmincreator@gmail.com',
@@ -77,6 +77,31 @@ export const SEED_MARKETS: Market[] = [
     radiusKm: 8.0,
     isActive: true,
   },
+];
+
+// All official Unions for Kaliganj and Kapasia Thanas in Gazipur
+export const SEED_UNIONS: UnionArea[] = [
+  // কালীগঞ্জ থানার ইউনিয়নসমূহ (৭টি)
+  { id: 'baktarpur', nameEn: 'Baktarpur Union', nameBn: 'বক্তারপুর ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+  { id: 'moktarpur', nameEn: 'Moktarpur Union', nameBn: 'মোক্তারপুর ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+  { id: 'jamalpur', nameEn: 'Jamalpur Union', nameBn: 'জামালপুর ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+  { id: 'jangalia', nameEn: 'Jangalia Union', nameBn: 'জাঙ্গালিয়া ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+  { id: 'bahadurshadi', nameEn: 'Bahadurshadi Union', nameBn: 'বাহাদুরশাদী ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+  { id: 'nagari', nameEn: 'Nagari Union', nameBn: 'নাগরী ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+  { id: 'tumulia', nameEn: 'Tumulia Union', nameBn: 'তুমুলিয়া ইউনিয়ন', thanaId: 'kaliganj', thanaNameBn: 'কালীগঞ্জ' },
+
+  // কাপাসিয়া থানার ইউনিয়নসমূহ (১১টি)
+  { id: 'kapasia_sadar', nameEn: 'Kapasia Sadar', nameBn: 'কাপাসিয়া সদর', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'durgapur', nameEn: 'Durgapur', nameBn: 'দুর্গাপুর', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'chandpur', nameEn: 'Chandpur', nameBn: 'চাঁদপুর', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'targaon', nameEn: 'Targaon', nameBn: 'তরগাঁও', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'barishaba', nameEn: 'Barishab', nameBn: 'বারিষাব', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'karihata', nameEn: 'Karihata', nameBn: 'কড়িহাতা', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'sanmania', nameEn: 'Sanmania', nameBn: 'সনমানিয়া', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'rayed', nameEn: 'Rayed', nameBn: 'রায়েদ', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'singhashree', nameEn: 'Singhashree', nameBn: 'সিংহশ্রী', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'tok', nameEn: 'Tok', nameBn: 'টোক', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+  { id: 'ghagatia', nameEn: 'Ghagatia', nameBn: 'ঘাগটিয়া', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
 ];
 
 export const SEED_CATEGORIES: Category[] = [
@@ -288,6 +313,8 @@ export const SEED_RIDERS: DeliveryRiderAccount[] = [
     phone: '01719998877',
     password: '123',
     area: 'kaliganj',
+    thanaId: 'kaliganj',
+    assignedUnionIds: ['baktarpur', 'moktarpur', 'jamalpur', 'tumulia'],
     isOnline: true,
     isActive: true,
     createdAt: '2026-01-01T00:00:00Z',
@@ -298,9 +325,35 @@ export const SEED_RIDERS: DeliveryRiderAccount[] = [
     phone: '01822334455',
     password: '123',
     area: 'kapasia',
+    thanaId: 'kapasia',
+    assignedUnionIds: ['kapasia_sadar', 'durgapur', 'chandpur', 'tok'],
     isOnline: true,
     isActive: true,
     createdAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'rider-03',
+    name: 'মোঃ জাহিদ হোসেন (কালীগঞ্জ)',
+    phone: '01919998877',
+    password: '123',
+    area: 'kaliganj',
+    thanaId: 'kaliganj',
+    assignedUnionIds: ['jangalia', 'bahadurshadi', 'nagari', 'baktarpur'],
+    isOnline: true,
+    isActive: true,
+    createdAt: '2026-01-02T00:00:00Z',
+  },
+  {
+    id: 'rider-04',
+    name: 'মোঃ মিলন মিয়া (কাপাসিয়া)',
+    phone: '01619998877',
+    password: '123',
+    area: 'kapasia',
+    thanaId: 'kapasia',
+    assignedUnionIds: ['targaon', 'barishaba', 'karihata', 'sanmania', 'rayed', 'singhashree', 'ghagatia'],
+    isOnline: true,
+    isActive: true,
+    createdAt: '2026-01-02T00:00:00Z',
   },
 ];
 
@@ -310,6 +363,10 @@ export const SEED_ORDERS: Order[] = [
     customerId: 'cust-demo',
     shopId: 'admin-store',
     marketId: 'kaliganj',
+    thanaId: 'kaliganj',
+    thanaNameBn: 'কালীগঞ্জ',
+    unionId: 'baktarpur',
+    unionNameBn: 'বক্তারপুর ইউনিয়ন',
     riderId: 'rider-01',
     riderName: 'কামরুল হাসান (কালীগঞ্জ রাইডার)',
     riderPhone: '01719998877',

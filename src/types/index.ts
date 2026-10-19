@@ -29,6 +29,14 @@ export type LedgerEntryType =
   | 'rider_handover'
   | 'shop_settlement';
 
+export interface UnionArea {
+  id: string;
+  nameEn: string;
+  nameBn: string;
+  thanaId: string; // 'kaliganj' | 'kapasia'
+  thanaNameBn: string;
+}
+
 export interface CustomerAccount {
   id: string;
   name: string;
@@ -36,6 +44,8 @@ export interface CustomerAccount {
   address: string;
   password?: string;
   areaId: string;
+  unionId?: string;
+  unionName?: string;
   createdAt: string;
 }
 
@@ -44,7 +54,9 @@ export interface DeliveryRiderAccount {
   name: string;
   phone: string;
   password?: string;
-  area: string;
+  area: string; // Thana ID e.g. 'kaliganj' | 'kapasia'
+  thanaId?: string;
+  assignedUnionIds: string[]; // List of assigned union IDs for order routing
   isOnline: boolean;
   isActive: boolean;
   createdAt: string;
@@ -152,6 +164,10 @@ export interface Order {
   customerId: string;
   shopId: string;
   marketId: string;
+  thanaId?: string;
+  thanaNameBn?: string;
+  unionId?: string;
+  unionNameBn?: string;
   riderId?: string;
   riderName?: string;
   riderPhone?: string;

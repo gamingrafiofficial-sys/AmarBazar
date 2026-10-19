@@ -274,11 +274,17 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             >
               <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 gap-2">
                 <div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                     <span className="font-mono text-xs font-bold text-slate-700">
                       #{order.id}
                     </span>
                     <StatusBadge status={order.orderStatus} size="sm" />
+                    {order.unionNameBn && (
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                        <MapPin className="w-2.5 h-2.5" />
+                        {order.thanaNameBn ? `${order.thanaNameBn} • ` : ''}{order.unionNameBn}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
                     {new Date(order.createdAt).toLocaleDateString()} •{' '}

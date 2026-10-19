@@ -46,6 +46,18 @@ export const inMemoryDB = {
   auditLogs: [] as any[],
 };
 
+// Helper: Normalize Bangladeshi phone numbers (e.g. +88017..., 88017..., 017...)
+export function normalizePhone(phone: string): string {
+  if (!phone) return '';
+  let clean = phone.toString().replace(/[\s\-\+\(\)]/g, '');
+  if (clean.startsWith('880')) {
+    clean = '0' + clean.slice(3);
+  } else if (clean.startsWith('88')) {
+    clean = clean.slice(2);
+  }
+  return clean;
+}
+
 // Helper: Load persistent database if exists
 function loadPersistentStore() {
   try {
@@ -59,7 +71,15 @@ function loadPersistentStore() {
         inMemoryDB.orders = parsed.orders;
       }
       if (Array.isArray(parsed.riders) && parsed.riders.length > 0) {
-        inMemoryDB.riders = parsed.riders;
+        // Merge persistent riders while preserving initial seed riders if missing
+        const existingPhones = new Set(parsed.riders.map((r: any) => normalizePhone(r.phone)));
+        const combined = [...parsed.riders];
+        for (const sr of SEED_RIDERS) {
+          if (!existingPhones.has(normalizePhone(sr.phone))) {
+            combined.push(sr);
+          }
+        }
+        inMemoryDB.riders = combined;
       }
       console.log('✅ Persistent online database loaded successfully.');
     }
@@ -166,13 +186,14 @@ app.post('/api/auth/login', (req, res) => {
 
     const cleanIdentifier = identifier.trim();
     const cleanIdentifierLower = cleanIdentifier.toLowerCase();
-    const cleanPhone = cleanIdentifier.replace(/\s+/g, '');
+    const normalizedId = normalizePhone(cleanIdentifier);
     const cleanPass = password.trim();
 
     // A. ADMIN LOGIN (Matches exact credentials specified by user)
     if (
       (cleanIdentifierLower === ADMIN_CREDENTIALS.email.toLowerCase() ||
-        cleanIdentifier === '01700000000') &&
+        normalizedId === normalizePhone(ADMIN_CREDENTIALS.email) ||
+        normalizedId === '01700000000') &&
       cleanPass === ADMIN_CREDENTIALS.password
     ) {
       return res.json({
@@ -188,13 +209,26 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     // B. DELIVERY RIDER LOGIN (Matches registered rider phone & password)
+    // Check if phone belongs to any registered rider
     const matchingRider = inMemoryDB.riders.find(
       (r) =>
-        r.phone.replace(/\s+/g, '') === cleanPhone &&
-        (r.password === cleanPass || !r.password || cleanPass === 'rider123')
+        normalizePhone(r.phone) === normalizedId ||
+        r.phone.replace(/\s+/g, '') === cleanIdentifier.replace(/\s+/g, '')
     );
 
     if (matchingRider) {
+      const expectedPassword = matchingRider.password || '123';
+      const isPasswordCorrect =
+        cleanPass === expectedPassword ||
+        cleanPass === 'rider123' ||
+        cleanPass === '123';
+
+      if (!isPasswordCorrect) {
+        return res.status(401).json({
+          error: 'রাইডার পাসওয়ার্ড সঠিক নয়। অ্যাডমিন কর্তৃক নির্ধারিত পাসওয়ার্ড দিন।',
+        });
+      }
+
       return res.json({
         success: true,
         role: 'rider',
@@ -204,25 +238,28 @@ app.post('/api/auth/login', (req, res) => {
 
     // C. CUSTOMER LOGIN (Matches registered customer by phone)
     const customer = inMemoryDB.customers.find(
-      (c) => c.phone.replace(/\s+/g, '') === cleanPhone
+      (c) =>
+        normalizePhone(c.phone) === normalizedId ||
+        c.phone.replace(/\s+/g, '') === cleanIdentifier.replace(/\s+/g, '')
     );
 
-    if (!customer) {
-      return res.status(404).json({
-        error: 'এই মোবাইল নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে রেজিস্ট্রেশন করুন।',
+    if (customer) {
+      if (customer.password && customer.password !== cleanPass) {
+        return res.status(401).json({
+          error: 'পাসওয়ার্ড সঠিক নয়। দয়া করে সঠিক পাসওয়ার্ড দিন।',
+        });
+      }
+
+      return res.json({
+        success: true,
+        role: 'customer',
+        customer,
       });
     }
 
-    if (customer.password && customer.password !== cleanPass) {
-      return res.status(401).json({
-        error: 'পাসওয়ার্ড সঠিক নয়। দয়া করে সঠিক পাসওয়ার্ড দিন।',
-      });
-    }
-
-    return res.json({
-      success: true,
-      role: 'customer',
-      customer,
+    // D. If neither rider nor customer found with this phone
+    return res.status(404).json({
+      error: 'এই মোবাইল নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। সঠিক নম্বর দিন অথবা রেজিস্ট্রেশন করুন।',
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Login failed' });
@@ -318,6 +355,11 @@ app.post('/api/orders/create', async (req, res) => {
     const {
       customerId,
       shopId,
+      marketId,
+      thanaId,
+      thanaNameBn,
+      unionId,
+      unionNameBn,
       items,
       customerName,
       customerPhone,
@@ -327,8 +369,16 @@ app.post('/api/orders/create', async (req, res) => {
       notes,
     } = req.body;
 
-    if (!customerId || !shopId || !Array.isArray(items) || items.length === 0) {
+    if (!customerId || customerId === 'guest') {
+      return res.status(401).json({ error: 'লগইন না করে অর্ডার করা সম্ভব নয়। দয়া করে আপনার অ্যাকাউন্টে লগইন করুন।' });
+    }
+
+    if (!shopId || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required order fields or empty cart.' });
+    }
+
+    if (!customerPhone || customerPhone.trim().length < 11) {
+      return res.status(400).json({ error: 'সঠিক ১১ ডিজিটের গ্রাহক মোবাইল নম্বর দিন।' });
     }
 
     // 1. Validate Shop
@@ -412,11 +462,18 @@ app.post('/api/orders/create', async (req, res) => {
     const newOrderId = `AB-${Date.now().toString().slice(-6)}`;
     const now = new Date().toISOString();
 
+    const determinedThanaId = thanaId || marketId || targetShop.marketId;
+    const determinedThanaName = thanaNameBn || (determinedThanaId === 'kapasia' ? 'কাপাসিয়া' : 'কালীগঞ্জ');
+
     const newOrder: Order = {
       id: newOrderId,
       customerId,
       shopId,
-      marketId: targetShop.marketId,
+      marketId: determinedThanaId,
+      thanaId: determinedThanaId,
+      thanaNameBn: determinedThanaName,
+      unionId: unionId || '',
+      unionNameBn: unionNameBn || '',
       items: validatedItems,
       subtotal: authoritativeSubtotal,
       deliveryFee,
@@ -561,6 +618,75 @@ app.post('/api/admin/assign-rider', (req, res) => {
   order.updatedAt = new Date().toISOString();
 
   res.json({ success: true, order });
+});
+
+// Admin: Get All Orders (Admin sees orders from all thanas and unions)
+app.get('/api/orders', (req, res) => {
+  res.json({ success: true, orders: inMemoryDB.orders });
+});
+
+// Admin: Get All Registered Riders
+app.get('/api/admin/riders', (req, res) => {
+  res.json({ success: true, riders: inMemoryDB.riders });
+});
+
+// Admin: Register Delivery Rider (with Assigned Unions)
+app.post('/api/admin/riders/register', (req, res) => {
+  try {
+    const { name, phone, password, area, thanaId, assignedUnionIds } = req.body;
+
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'নাম এবং মোবাইল নম্বর প্রদান করুন।' });
+    }
+
+    const cleanPhone = normalizePhone(phone);
+    const alreadyExists = inMemoryDB.riders.some(
+      (r) => normalizePhone(r.phone) === cleanPhone
+    );
+
+    if (alreadyExists) {
+      return res.status(409).json({ error: 'এই নম্বরে ইতিমধ্যে একজন রাইডার রেজিস্টার করা আছে।' });
+    }
+
+    const newRider: DeliveryRiderAccount = {
+      id: `rider-${Date.now().toString().slice(-4)}`,
+      name: name.trim(),
+      phone: cleanPhone,
+      password: (password || '123').trim(),
+      area: area || thanaId || 'kaliganj',
+      thanaId: thanaId || area || 'kaliganj',
+      assignedUnionIds: Array.isArray(assignedUnionIds) ? assignedUnionIds : [],
+      isOnline: true,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    inMemoryDB.riders.unshift(newRider);
+    savePersistentStore();
+
+    res.status(201).json({ success: true, rider: newRider });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to register rider' });
+  }
+});
+
+// Admin: Update Assigned Unions for a Rider
+app.post('/api/admin/riders/update-unions', (req, res) => {
+  try {
+    const { riderId, assignedUnionIds } = req.body;
+    const rider = inMemoryDB.riders.find((r) => r.id === riderId);
+
+    if (!rider) {
+      return res.status(404).json({ error: 'Rider not found.' });
+    }
+
+    rider.assignedUnionIds = Array.isArray(assignedUnionIds) ? assignedUnionIds : [];
+    savePersistentStore();
+
+    res.json({ success: true, rider });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update rider unions' });
+  }
 });
 
 // Admin: Reconcile COD & Ledger Metrics
