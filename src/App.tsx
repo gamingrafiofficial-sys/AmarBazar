@@ -31,6 +31,7 @@ import {
   CustomerAccount,
   OrderStatus,
   UnionArea,
+  OrderMessage,
 } from './types';
 import { Search, MapPin } from 'lucide-react';
 
@@ -248,6 +249,96 @@ function MarketplaceMain() {
           : o
       )
     );
+  };
+
+  // Order Messaging: Send message on an order (Customer, Rider, or Admin)
+  const handleSendMessage = async (
+    orderId: string,
+    text: string,
+    senderRole?: 'admin' | 'rider' | 'customer',
+    senderName?: string,
+    senderPhone?: string
+  ) => {
+    const roleToSend =
+      senderRole ||
+      (role === 'admin' ? 'admin' : role === 'rider' ? 'rider' : 'customer');
+    const nameToSend =
+      senderName ||
+      (roleToSend === 'admin'
+        ? 'এডমিন'
+        : roleToSend === 'rider'
+        ? activeRider?.name || 'রাইডার'
+        : loggedInCustomer?.name || 'গ্রাহক');
+    const phoneToSend =
+      senderPhone ||
+      (roleToSend === 'rider' ? activeRider?.phone : loggedInCustomer?.phone);
+
+    const tempMessage: OrderMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      orderId,
+      senderRole: roleToSend,
+      senderName: nameToSend,
+      senderPhone: phoneToSend,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic update
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, messages: [...(o.messages || []), tempMessage] }
+          : o
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderRole: roleToSend,
+          senderName: nameToSend,
+          senderPhone: phoneToSend,
+          text,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.message) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  messages: [
+                    ...(o.messages || []).filter((m) => m.id !== tempMessage.id),
+                    data.message,
+                  ],
+                }
+              : o
+          )
+        );
+      }
+    } catch (err) {
+      console.warn('Network error sending message:', err);
+    }
+  };
+
+  // Order Note: Add or update order note
+  const handleUpdateOrderNote = async (orderId: string, newNotes: string) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, notes: newNotes } : o))
+    );
+
+    try {
+      await fetch(`/api/orders/${orderId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: newNotes }),
+      });
+    } catch (err) {
+      console.warn('Network error updating note:', err);
+    }
   };
 
   // Admin Adds Area
@@ -516,6 +607,8 @@ function MarketplaceMain() {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onCancelOrder={handleCancelOrder}
+                onSendMessage={handleSendMessage}
+                onUpdateOrderNote={handleUpdateOrderNote}
               />
             )}
 
@@ -575,6 +668,8 @@ function MarketplaceMain() {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   onCancelOrder={handleCancelOrder}
+                  onSendMessage={handleSendMessage}
+                  onUpdateOrderNote={handleUpdateOrderNote}
                 />
               ) : (
                 <LoginPage
@@ -626,6 +721,8 @@ function MarketplaceMain() {
                 prev.map((o) => (o.riderId === id ? { ...o, paymentStatus: 'deposited' } : o))
               );
             }}
+            onSendMessage={handleSendMessage}
+            onUpdateOrderNote={handleUpdateOrderNote}
           />
         )}
 
@@ -645,6 +742,8 @@ function MarketplaceMain() {
             onRegisterRider={handleRegisterRider}
             onAssignRider={handleAdminAssignRider}
             onUpdateRiderUnions={handleUpdateRiderUnions}
+            onSendMessage={handleSendMessage}
+            onUpdateOrderNote={handleUpdateOrderNote}
           />
         )}
       </main>

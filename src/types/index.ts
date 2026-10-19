@@ -193,8 +193,19 @@ export interface Order {
   failureReason?: string;
   cancellationReason?: string;
   notes?: string;
+  messages?: OrderMessage[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OrderMessage {
+  id: string;
+  orderId: string;
+  senderRole: 'admin' | 'rider' | 'customer';
+  senderName: string;
+  senderPhone?: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface DeliveryTask {

@@ -20,7 +20,10 @@ import {
   ChevronRight,
   ShieldCheck,
   CreditCard,
+  MessageSquare,
 } from 'lucide-react';
+import { OrderChatModal } from '../components/common/OrderChatModal';
+import { OrderNoteSection } from '../components/common/OrderNoteSection';
 
 interface ProfilePageProps {
   customer: CustomerAccount;
@@ -29,6 +32,8 @@ interface ProfilePageProps {
   onBackToShop: () => void;
   onViewOrderMemo: (order: Order) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
+  onSendMessage?: (orderId: string, text: string) => Promise<void>;
+  onUpdateOrderNote?: (orderId: string, notes: string) => Promise<void>;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
@@ -38,12 +43,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onBackToShop,
   onViewOrderMemo,
   onCancelOrder,
+  onSendMessage,
+  onUpdateOrderNote,
 }) => {
   const { language, formatBDT } = useLanguage();
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'delivered'>('all');
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
 
   // Filter orders specifically for this customer
   const cleanCustomerPhone = customer.phone.replace(/\s+/g, '');
@@ -449,6 +457,18 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     </div>
                   </div>
 
+                  {/* Order Note Component for Customer */}
+                  <div className="my-3">
+                    <OrderNoteSection
+                      orderId={order.id}
+                      notes={order.notes}
+                      userRole="customer"
+                      onUpdateNote={async (oId, n) => {
+                        if (onUpdateOrderNote) await onUpdateOrderNote(oId, n);
+                      }}
+                    />
+                  </div>
+
                   {/* Bottom Buttons */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <div className="text-xs text-slate-500 flex items-center gap-1">
@@ -456,7 +476,22 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       <span className="line-clamp-1">{order.deliveryAddress}</span>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center space-x-2">
+                      {/* Message & Chat Button */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveChatOrder(order)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1.5 shadow-2xs transition-colors"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>মেসেজ ও চ্যাট</span>
+                        {order.messages && order.messages.length > 0 && (
+                          <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                            {order.messages.length}
+                          </span>
+                        )}
+                      </button>
+
                       {/* Cancel button if pending */}
                       {order.orderStatus === 'pending_shop_confirmation' && (
                         <button
@@ -514,6 +549,21 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </div>
         )}
       </div>
+
+      {/* Real-time Order Chat Modal for Customer */}
+      {activeChatOrder && (
+        <OrderChatModal
+          order={orders.find((o) => o.id === activeChatOrder.id) || activeChatOrder}
+          currentUserRole="customer"
+          currentUserName={customer.name}
+          currentUserPhone={customer.phone}
+          isOpen={true}
+          onClose={() => setActiveChatOrder(null)}
+          onSendMessage={async (oId, text) => {
+            if (onSendMessage) await onSendMessage(oId, text);
+          }}
+        />
+      )}
     </div>
   );
 };

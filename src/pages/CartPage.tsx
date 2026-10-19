@@ -465,18 +465,41 @@ export const CartPage: React.FC<CartPageProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 flex items-center gap-1.5 mb-1">
-                  <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>{language === 'bn' ? 'বিশেষ নির্দেশনা (ঐচ্ছিক)' : 'Order Note (Optional)'}</span>
+              {/* Order Note (ডেলিভারি নোট ও বিশেষ নির্দেশনা) */}
+              <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200">
+                <label className="font-bold text-amber-950 flex items-center justify-between gap-1.5 mb-1.5 text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <span>{language === 'bn' ? 'অর্ডারের নিচে বিশেষ নোট (Order Note)' : 'Order Note (Optional)'}</span>
+                  </span>
+                  <span className="text-[10px] text-amber-800 font-semibold bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300/50">
+                    ঐচ্ছিক
+                  </span>
                 </label>
-                <input
-                  type="text"
-                  placeholder="যেমন: ফোন দিয়ে নিশ্চিত করে আসবেন"
+                <textarea
+                  rows={2}
+                  placeholder={
+                    language === 'bn'
+                      ? 'যেমন: বাসার গেটে এসে কল দিবেন, ভাঙতি টাকা নিয়ে আসবেন, পণ্য সাবধানে রাখবেন...'
+                      : 'e.g. Call when outside gate, bring exact change...'
+                  }
                   value={orderNotes}
                   onChange={(e) => setOrderNotes(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-emerald-600"
+                  className="w-full p-2.5 rounded-xl border border-amber-300 bg-white text-xs text-slate-900 focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 shadow-2xs"
                 />
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[10px] font-bold text-amber-900">ক্লিক করে নোট যোগ করুন:</span>
+                  {['ফোন দিয়ে আসবেন', 'গেটে এসে কল দিন', 'ভাঙতি টাকা আনবেন', 'পণ্য সাবধানে আনবেন'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setOrderNotes((prev) => (prev ? `${prev}, ${preset}` : preset))}
+                      className="text-[10px] bg-white hover:bg-amber-100 text-amber-950 border border-amber-300 px-2.5 py-0.5 rounded-lg transition-colors font-semibold shadow-2xs active:scale-95"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Delivery distance box */}

@@ -20,7 +20,7 @@ import {
   SEED_CUSTOMERS,
   ADMIN_CREDENTIALS,
 } from './src/data/seedData';
-import { Order, Product, LedgerEntry, CustomerAccount, DeliveryRiderAccount } from './src/types';
+import { Order, Product, LedgerEntry, CustomerAccount, DeliveryRiderAccount, OrderMessage } from './src/types';
 
 dotenv.config();
 
@@ -729,6 +729,76 @@ app.post('/api/admin/record-handover', (req, res) => {
     });
 
   res.json({ success: true, entry });
+});
+
+// Order Messaging: Send message on an order (Customer, Rider, or Admin)
+app.post('/api/orders/:orderId/messages', (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { senderRole, senderName, senderPhone, text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'মেসেজ খালি হতে পারে না।' });
+    }
+
+    const order = inMemoryDB.orders.find((o) => o.id === orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (!Array.isArray(order.messages)) {
+      order.messages = [];
+    }
+
+    const newMessage: OrderMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      orderId,
+      senderRole: senderRole || 'customer',
+      senderName: senderName || (senderRole === 'admin' ? 'এডমিন' : senderRole === 'rider' ? 'রাইডার' : 'গ্রাহক'),
+      senderPhone: senderPhone || '',
+      text: text.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    order.messages.push(newMessage);
+    order.updatedAt = new Date().toISOString();
+    savePersistentStore();
+
+    res.status(201).json({ success: true, message: newMessage, order });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to send message.' });
+  }
+});
+
+// Order Messaging: Get all messages for an order
+app.get('/api/orders/:orderId/messages', (req, res) => {
+  const { orderId } = req.params;
+  const order = inMemoryDB.orders.find((o) => o.id === orderId);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+  res.json({ success: true, messages: order.messages || [] });
+});
+
+// Order Note: Add or update note under an order (Admin, Rider, or Customer)
+app.post('/api/orders/:orderId/notes', (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { notes } = req.body;
+
+    const order = inMemoryDB.orders.find((o) => o.id === orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    order.notes = typeof notes === 'string' ? notes.trim() : '';
+    order.updatedAt = new Date().toISOString();
+    savePersistentStore();
+
+    res.json({ success: true, notes: order.notes, order });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update order note.' });
+  }
 });
 
 // Vite Integration for dev server

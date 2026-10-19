@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Order, DeliveryRiderAccount, OrderStatus } from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
+import { OrderChatModal } from '../common/OrderChatModal';
+import { OrderNoteSection } from '../common/OrderNoteSection';
 import { getNavigationUrl } from '../../lib/maps';
 import { calculateOrderFinancialSplit } from '../../lib/financialLedger';
 import { SEED_UNIONS } from '../../data/seedData';
@@ -20,6 +22,8 @@ import {
   Send,
   BellRing,
   Layers,
+  MessageSquare,
+  FileText,
 } from 'lucide-react';
 
 interface RiderDashboardProps {
@@ -29,6 +33,8 @@ interface RiderDashboardProps {
   onTransitionOrder: (orderId: string, targetStatus: OrderStatus, reason?: string) => Promise<void>;
   onToggleOnline: (isOnline: boolean) => void;
   onRecordHandover: (riderId: string, amount: number, notes?: string) => Promise<void>;
+  onSendMessage?: (orderId: string, text: string) => Promise<void>;
+  onUpdateOrderNote?: (orderId: string, notes: string) => Promise<void>;
 }
 
 export const RiderDashboard: React.FC<RiderDashboardProps> = ({
@@ -38,6 +44,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   onTransitionOrder,
   onToggleOnline,
   onRecordHandover,
+  onSendMessage,
+  onUpdateOrderNote,
 }) => {
   const { language, formatBDT } = useLanguage();
   const [failOrderId, setFailOrderId] = useState<string | null>(null);
@@ -45,6 +53,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [handoverAmount, setHandoverAmount] = useState<number>(0);
+  const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
 
   // Available new orders strictly routed by customer's union
   // "কোনো Castumer যেই এরিয়া (ইউনিয়ন) সিলেক্ট করে অডার Submit করবে শুধু সেই এরিয়ার Rider কাছে অডার যাবে"
@@ -296,6 +305,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       <p className="text-[11px] text-emerald-700 font-semibold">
                         সড়ক দূরত্ব: {order.roadDistanceKm} কি.মি
                       </p>
+                      {order.notes && (
+                        <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-950 mt-1">
+                          <strong>📝 কাস্টমার নোট:</strong> {order.notes}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -389,8 +403,34 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Rider Milestone Buttons */}
-                  <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                  {/* Order Note Component for Rider */}
+                  <div className="my-3">
+                    <OrderNoteSection
+                      orderId={order.id}
+                      notes={order.notes}
+                      userRole="rider"
+                      onUpdateNote={async (oId, n) => {
+                        if (onUpdateOrderNote) await onUpdateOrderNote(oId, n);
+                      }}
+                    />
+                  </div>
+
+                  {/* Rider Milestone Buttons and Chat */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setActiveChatOrder(order)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-xs transition-colors shrink-0"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>কাস্টমারকে মেসেজ</span>
+                      {order.messages && order.messages.length > 0 && (
+                        <span className="bg-white text-blue-900 text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold">
+                          {order.messages.length}
+                        </span>
+                      )}
+                    </button>
+
                     {order.orderStatus === 'rider_assigned' && (
                       <button
                         onClick={() => handleNextStep(order)}
@@ -510,6 +550,21 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Real-time Order Chat Modal for Rider */}
+      {activeChatOrder && (
+        <OrderChatModal
+          order={allOrders.find((o) => o.id === activeChatOrder.id) || activeChatOrder}
+          currentUserRole="rider"
+          currentUserName={rider.name}
+          currentUserPhone={rider.phone}
+          isOpen={true}
+          onClose={() => setActiveChatOrder(null)}
+          onSendMessage={async (oId, text) => {
+            if (onSendMessage) await onSendMessage(oId, text);
+          }}
+        />
       )}
     </div>
   );

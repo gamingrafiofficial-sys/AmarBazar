@@ -10,6 +10,8 @@ import {
 } from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
+import { OrderChatModal } from '../common/OrderChatModal';
+import { OrderNoteSection } from '../common/OrderNoteSection';
 import { SEED_UNIONS } from '../../data/seedData';
 import {
   ShieldAlert,
@@ -28,6 +30,8 @@ import {
   Check,
   X,
   Filter,
+  MessageSquare,
+  FileText,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -44,6 +48,8 @@ interface AdminDashboardProps {
   onRegisterRider: (rider: Omit<DeliveryRiderAccount, 'id' | 'createdAt'>) => void;
   onAssignRider: (orderId: string, riderId: string) => Promise<void>;
   onUpdateRiderUnions?: (riderId: string, assignedUnionIds: string[]) => void;
+  onSendMessage?: (orderId: string, text: string) => Promise<void>;
+  onUpdateOrderNote?: (orderId: string, notes: string) => Promise<void>;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -60,6 +66,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRegisterRider,
   onAssignRider,
   onUpdateRiderUnions,
+  onSendMessage,
+  onUpdateOrderNote,
 }) => {
   const { language, formatBDT } = useLanguage();
   const [activeTab, setActiveTab] = useState<'new_orders' | 'all_orders' | 'products' | 'areas' | 'riders'>('new_orders');
@@ -69,6 +77,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [thanaFilter, setThanaFilter] = useState<string>('all');
   const [unionFilter, setUnionFilter] = useState<string>('all');
+  const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
 
   // Rider Filter & Management
   const [riderAreaFilter, setRiderAreaFilter] = useState<string>('all');
@@ -420,9 +429,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {order.items.map((i) => `${i.nameBn} (${i.quantity} ${i.unit})`).join(', ')}
                         </p>
                       </div>
+
+                      {/* Order Note Component */}
+                      <div className="mb-3">
+                        <OrderNoteSection
+                          orderId={order.id}
+                          notes={order.notes}
+                          userRole="admin"
+                          compact={true}
+                          onUpdateNote={async (oId, n) => {
+                            if (onUpdateOrderNote) await onUpdateOrderNote(oId, n);
+                          }}
+                        />
+                      </div>
                     </div>
 
                     <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveChatOrder(order)}
+                        className="px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-2xs"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>কাস্টমারকে মেসেজ</span>
+                        {order.messages && order.messages.length > 0 && (
+                          <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                            {order.messages.length}
+                          </span>
+                        )}
+                      </button>
+
                       <select
                         defaultValue=""
                         onChange={(e) => {
@@ -541,13 +577,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <th className="py-2.5 px-3">ইউনিয়ন ও ঠিকানা</th>
                   <th className="py-2.5 px-3">স্ট্যাটাস</th>
                   <th className="py-2.5 px-3">রাইডার</th>
+                  <th className="py-2.5 px-3">নোট ও চ্যাট</th>
                   <th className="py-2.5 px-3 text-right">মূল্য (৳)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-slate-400 italic">
+                    <td colSpan={7} className="py-6 text-center text-slate-400 italic">
                       কোনো অর্ডার পাওয়া যায়নি।
                     </td>
                   </tr>
@@ -581,6 +618,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ) : (
                           <span className="text-slate-400 italic">অপেক্ষমান</span>
                         )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex flex-col gap-1 items-start">
+                          <button
+                            type="button"
+                            onClick={() => setActiveChatOrder(o)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold text-[11px] transition-colors"
+                          >
+                            <MessageSquare className="w-3 h-3 text-emerald-700" />
+                            <span>মেসেজ</span>
+                            {o.messages && o.messages.length > 0 && (
+                              <span className="bg-emerald-700 text-white text-[9px] px-1.5 py-0.2 rounded-full font-mono">
+                                {o.messages.length}
+                              </span>
+                            )}
+                          </button>
+                          {o.notes ? (
+                            <span
+                              className="text-[10px] text-amber-900 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded truncate max-w-[130px]"
+                              title={o.notes}
+                            >
+                              📝 {o.notes}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic">নোট নেই</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-right font-extrabold text-slate-900">
                         {formatBDT(o.totalAmount)}
@@ -1405,6 +1469,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Real-time Order Chat Modal for Admin */}
+      {activeChatOrder && (
+        <OrderChatModal
+          order={orders.find((o) => o.id === activeChatOrder.id) || activeChatOrder}
+          currentUserRole="admin"
+          currentUserName="সুপার এডমিন"
+          isOpen={true}
+          onClose={() => setActiveChatOrder(null)}
+          onSendMessage={async (oId, text) => {
+            if (onSendMessage) await onSendMessage(oId, text);
+          }}
+        />
       )}
     </div>
   );

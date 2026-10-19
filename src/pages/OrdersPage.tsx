@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Order } from '../types';
 import { useLanguage } from '../hooks/useLanguage';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { OrderChatModal } from '../components/common/OrderChatModal';
+import { OrderNoteSection } from '../components/common/OrderNoteSection';
 import {
   Package,
   FileText,
@@ -15,22 +17,28 @@ import {
   XCircle,
   HelpCircle,
   Clock,
+  MessageSquare,
 } from 'lucide-react';
 
 interface OrdersPageProps {
   orders: Order[];
   onBackToShop: () => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
+  onSendMessage?: (orderId: string, text: string) => Promise<void>;
+  onUpdateOrderNote?: (orderId: string, notes: string) => Promise<void>;
 }
 
 export const OrdersPage: React.FC<OrdersPageProps> = ({
   orders,
   onBackToShop,
   onCancelOrder,
+  onSendMessage,
+  onUpdateOrderNote,
 }) => {
   const { language, formatBDT } = useLanguage();
   const [selectedMemoOrder, setSelectedMemoOrder] = useState<Order | null>(orders[0] || null);
   const [activeTab, setActiveTab] = useState<'list' | 'memo'>('list');
+  const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
 
   // Cancel prompt
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -258,6 +266,35 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               </div>
             </div>
 
+            {/* Order Note Component in Memo */}
+            <div className="mt-4 print:hidden">
+              <OrderNoteSection
+                orderId={selectedMemoOrder.id}
+                notes={selectedMemoOrder.notes}
+                userRole="customer"
+                onUpdateNote={async (oId, n) => {
+                  if (onUpdateOrderNote) await onUpdateOrderNote(oId, n);
+                }}
+              />
+            </div>
+
+            {/* Chat button in Memo */}
+            <div className="mt-3 flex justify-center print:hidden">
+              <button
+                type="button"
+                onClick={() => setActiveChatOrder(selectedMemoOrder)}
+                className="w-full sm:w-auto px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors"
+              >
+                <MessageSquare className="w-4 h-4 text-emerald-300" />
+                <span>রাইডার ও এডমিনকে মেসেজ পাঠান (Chat)</span>
+                {selectedMemoOrder.messages && selectedMemoOrder.messages.length > 0 && (
+                  <span className="bg-white text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                    {selectedMemoOrder.messages.length}টি মেসেজ
+                  </span>
+                )}
+              </button>
+            </div>
+
             {/* Footer note */}
             <p className="text-[10px] text-center text-slate-400 mt-6 pt-2 border-t border-slate-100">
               আমাদের সাথে কেনাকাটা করার জন্য ধন্যবাদ। প্রয়োজনে যোগাযোগ: 09612-BAZAAR (২৪/৭ হেল্পলাইন)
@@ -335,18 +372,46 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 )}
               </div>
 
+              {/* Order Note Component for Customer */}
+              <div className="mt-3">
+                <OrderNoteSection
+                  orderId={order.id}
+                  notes={order.notes}
+                  userRole="customer"
+                  onUpdateNote={async (oId, n) => {
+                    if (onUpdateOrderNote) await onUpdateOrderNote(oId, n);
+                  }}
+                />
+              </div>
+
               {/* Action Buttons */}
               <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                <button
-                  onClick={() => {
-                    setSelectedMemoOrder(order);
-                    setActiveTab('memo');
-                  }}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
-                >
-                  <FileText className="w-3.5 h-3.5 text-amber-400" />
-                  <span>ক্যাশ মেমো দেখুন (View Memo Receipt)</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedMemoOrder(order);
+                      setActiveTab('memo');
+                    }}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ক্যাশ মেমো দেখুন</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveChatOrder(order)}
+                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>মেসেজ ও সহায়তা</span>
+                    {order.messages && order.messages.length > 0 && (
+                      <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                        {order.messages.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
 
                 {order.orderStatus === 'pending_shop_confirmation' && (
                   <button
@@ -389,6 +454,21 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Real-time Order Chat Modal for Customer */}
+      {activeChatOrder && (
+        <OrderChatModal
+          order={orders.find((o) => o.id === activeChatOrder.id) || activeChatOrder}
+          currentUserRole="customer"
+          currentUserName={activeChatOrder.customerName || 'গ্রাহক'}
+          currentUserPhone={activeChatOrder.customerPhone}
+          isOpen={true}
+          onClose={() => setActiveChatOrder(null)}
+          onSendMessage={async (oId, text) => {
+            if (onSendMessage) await onSendMessage(oId, text);
+          }}
+        />
       )}
     </div>
   );
