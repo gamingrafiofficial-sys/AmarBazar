@@ -58,7 +58,13 @@ function MarketplaceMain() {
   // Orders & Riders
   const [orders, setOrders] = useState<Order[]>(SEED_ORDERS);
   const [registeredRiders, setRegisteredRiders] = useState<DeliveryRiderAccount[]>(SEED_RIDERS);
-  const [activeRider, setActiveRider] = useState<DeliveryRiderAccount | null>(SEED_RIDERS[0]);
+  const [activeRider, setActiveRider] = useState<DeliveryRiderAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem('amar_active_rider');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
 
   // Page Routing State (Full-page views: Catalog, ProductView, Cart, Orders, Login)
   const [currentPage, setCurrentPage] = useState<PageView>('catalog');
@@ -129,6 +135,20 @@ function MarketplaceMain() {
   });
 
   // Handlers
+  // Explicit User Logout (Clears customer, rider, and admin session permanently until next explicit login)
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('amar_auth_role');
+      localStorage.removeItem('amar_active_customer');
+      localStorage.removeItem('amar_active_rider');
+    } catch {}
+    setLoggedInCustomer(null);
+    setActiveRider(null);
+    setRole('customer');
+    setCurrentPage('catalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleOrderSuccess = (newOrder: Order) => {
     setOrders((prev) => [newOrder, ...prev]);
     setCurrentPage('orders');
@@ -420,6 +440,60 @@ function MarketplaceMain() {
     }
   };
 
+  // Admin / Rider Records COD Handover (Settles cash in hand)
+  const handleRecordHandover = async (riderId: string, amount: number, notes?: string) => {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.riderId === riderId && o.paymentStatus === 'collected'
+          ? { ...o, paymentStatus: 'deposited' }
+          : o
+      )
+    );
+
+    try {
+      await fetch('/api/admin/record-handover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ riderId, amount, notes }),
+      });
+    } catch (err) {
+      console.warn('Network error recording handover:', err);
+    }
+  };
+
+  // Admin Toggles Rider Active Status (Deactivate / Reactivate for Balance Settlement)
+  const handleToggleRiderActive = async (riderId: string, isActive: boolean, reason?: string) => {
+    setRegisteredRiders((prev) =>
+      prev.map((r) =>
+        r.id === riderId
+          ? { ...r, isActive, deactivatedReason: isActive ? undefined : reason }
+          : r
+      )
+    );
+
+    if (activeRider && activeRider.id === riderId) {
+      const updated = {
+        ...activeRider,
+        isActive,
+        deactivatedReason: isActive ? undefined : reason,
+      };
+      setActiveRider(updated);
+      try {
+        localStorage.setItem('amar_active_rider', JSON.stringify(updated));
+      } catch {}
+    }
+
+    try {
+      await fetch('/api/admin/riders/toggle-active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ riderId, isActive, reason }),
+      });
+    } catch (err) {
+      console.warn('Error syncing rider active state to server:', err);
+    }
+  };
+
   // Admin Adds New Product
   const handleAddProduct = (newProdData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const p: Product = {
@@ -470,6 +544,7 @@ function MarketplaceMain() {
         selectedAreaName={selectedAreaBadgeText}
         onOpenAreaSelector={() => setIsAreaModalOpen(true)}
         loggedInCustomer={loggedInCustomer}
+        onLogout={handleLogout}
       />
 
       {/* 2. ROLE ROUTING & PAGE VIEWS */}
@@ -621,19 +696,30 @@ function MarketplaceMain() {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onAdminLoginSuccess={() => {
+                  try {
+                    localStorage.setItem('amar_auth_role', 'admin');
+                  } catch {}
                   setRole('admin');
                   setCurrentPage('catalog');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onRiderLoginSuccess={(rider) => {
-                  setActiveRider({ ...rider, isOnline: true });
+                  const updatedRider = { ...rider, isOnline: true };
+                  try {
+                    localStorage.setItem('amar_active_rider', JSON.stringify(updatedRider));
+                    localStorage.setItem('amar_auth_role', 'rider');
+                  } catch {}
+                  setActiveRider(updatedRider);
                   setRole('rider');
                   setCurrentPage('catalog');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onCustomerLoginSuccess={(customer) => {
-                  setLoggedInCustomer(customer);
                   try {
                     localStorage.setItem('amar_active_customer', JSON.stringify(customer));
+                    localStorage.setItem('amar_auth_role', 'customer');
                   } catch {}
+                  setLoggedInCustomer(customer);
                   setRole('customer');
                   if (items.length > 0) {
                     setCurrentPage('cart');
@@ -651,14 +737,7 @@ function MarketplaceMain() {
                 <ProfilePage
                   customer={loggedInCustomer}
                   orders={orders}
-                  onLogout={() => {
-                    setLoggedInCustomer(null);
-                    try {
-                      localStorage.removeItem('amar_active_customer');
-                    } catch {}
-                    setCurrentPage('catalog');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
+                  onLogout={handleLogout}
                   onBackToShop={() => {
                     setCurrentPage('catalog');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -679,19 +758,30 @@ function MarketplaceMain() {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   onAdminLoginSuccess={() => {
+                    try {
+                      localStorage.setItem('amar_auth_role', 'admin');
+                    } catch {}
                     setRole('admin');
                     setCurrentPage('catalog');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   onRiderLoginSuccess={(rider) => {
-                    setActiveRider({ ...rider, isOnline: true });
+                    const updatedRider = { ...rider, isOnline: true };
+                    try {
+                      localStorage.setItem('amar_active_rider', JSON.stringify(updatedRider));
+                      localStorage.setItem('amar_auth_role', 'rider');
+                    } catch {}
+                    setActiveRider(updatedRider);
                     setRole('rider');
                     setCurrentPage('catalog');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   onCustomerLoginSuccess={(customer) => {
-                    setLoggedInCustomer(customer);
                     try {
                       localStorage.setItem('amar_active_customer', JSON.stringify(customer));
+                      localStorage.setItem('amar_auth_role', 'customer');
                     } catch {}
+                    setLoggedInCustomer(customer);
                     setRole('customer');
                     if (items.length > 0) {
                       setCurrentPage('cart');
@@ -713,16 +803,17 @@ function MarketplaceMain() {
             allOrders={orders}
             onAcceptOrder={handleRiderAcceptOrder}
             onTransitionOrder={handleTransitionOrder}
-            onToggleOnline={(online) =>
-              setActiveRider({ ...activeRider, isOnline: online })
-            }
-            onRecordHandover={async (id) => {
-              setOrders((prev) =>
-                prev.map((o) => (o.riderId === id ? { ...o, paymentStatus: 'deposited' } : o))
-              );
+            onToggleOnline={(online) => {
+              const updated = { ...activeRider, isOnline: online };
+              setActiveRider(updated);
+              try {
+                localStorage.setItem('amar_active_rider', JSON.stringify(updated));
+              } catch {}
             }}
+            onRecordHandover={handleRecordHandover}
             onSendMessage={handleSendMessage}
             onUpdateOrderNote={handleUpdateOrderNote}
+            onLogout={handleLogout}
           />
         )}
 
@@ -742,8 +833,11 @@ function MarketplaceMain() {
             onRegisterRider={handleRegisterRider}
             onAssignRider={handleAdminAssignRider}
             onUpdateRiderUnions={handleUpdateRiderUnions}
+            onToggleRiderActive={handleToggleRiderActive}
+            onRecordHandover={handleRecordHandover}
             onSendMessage={handleSendMessage}
             onUpdateOrderNote={handleUpdateOrderNote}
+            onLogout={handleLogout}
           />
         )}
       </main>

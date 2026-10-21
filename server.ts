@@ -689,6 +689,40 @@ app.post('/api/admin/riders/update-unions', (req, res) => {
   }
 });
 
+// Admin: Toggle Rider Active Status (Deactivate / Activate with optional reason)
+app.post('/api/admin/riders/toggle-active', (req, res) => {
+  try {
+    const { riderId, isActive, reason } = req.body;
+    const rider = inMemoryDB.riders.find((r) => r.id === riderId);
+
+    if (!rider) {
+      return res.status(404).json({ error: 'Rider not found.' });
+    }
+
+    rider.isActive = typeof isActive === 'boolean' ? isActive : !rider.isActive;
+    if (reason !== undefined) {
+      rider.deactivatedReason = reason;
+    } else if (rider.isActive) {
+      rider.deactivatedReason = undefined;
+    }
+    savePersistentStore();
+
+    inMemoryDB.auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      userId: 'admin',
+      action: rider.isActive ? 'RIDER_ACTIVATED' : 'RIDER_DEACTIVATED',
+      resource: 'riders',
+      resourceId: riderId,
+      details: `Rider ${rider.name} status updated to ${rider.isActive ? 'ACTIVE' : 'DEACTIVATED'}. Reason: ${reason || 'N/A'}`,
+      createdAt: new Date().toISOString(),
+    });
+
+    res.json({ success: true, rider });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update rider status' });
+  }
+});
+
 // Admin: Reconcile COD & Ledger Metrics
 app.get('/api/admin/reconcile-cod', (req, res) => {
   const reconciliation = computeFinancialReconciliation(inMemoryDB.orders, inMemoryDB.ledger);
@@ -727,6 +761,8 @@ app.post('/api/admin/record-handover', (req, res) => {
     .forEach((o) => {
       o.paymentStatus = 'deposited';
     });
+
+  savePersistentStore();
 
   res.json({ success: true, entry });
 });

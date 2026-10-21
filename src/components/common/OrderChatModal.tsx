@@ -57,7 +57,9 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
     setIsSending(true);
 
     try {
+      const minAnim = new Promise((r) => setTimeout(r, 200));
       await onSendMessage(order.id, textToSend);
+      await minAnim;
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {

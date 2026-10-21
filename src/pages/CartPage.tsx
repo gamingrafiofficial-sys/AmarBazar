@@ -23,6 +23,8 @@ import {
   Building,
   Lock,
   LogIn,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface CartPageProps {
@@ -69,6 +71,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [deliveryAddress, setDeliveryAddress] = useState(customerProfile?.address || '');
   const [orderNotes, setOrderNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState<'idle' | 'loading' | 'submitted' | 'failed'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Sync inputs when customerProfile is loaded or changes
@@ -118,8 +121,12 @@ export const CartPage: React.FC<CartPageProps> = ({
     }
 
     setIsSubmitting(true);
+    setSubmitPhase('loading');
 
     try {
+      // 0.25s smooth loading animation to satisfy visual feedback requirement
+      const minAnimationPromise = new Promise((resolve) => setTimeout(resolve, 250));
+
       const payload = {
         customerId: customerProfile?.id || `cust-${Date.now()}`,
         shopId: 'admin-store',
@@ -140,11 +147,13 @@ export const CartPage: React.FC<CartPageProps> = ({
         notes: orderNotes,
       };
 
-      const res = await fetch('/api/orders/create', {
+      const resPromise = fetch('/api/orders/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      const [res] = await Promise.all([resPromise, minAnimationPromise]);
 
       let placedOrder: Order;
       if (res.ok) {
@@ -188,12 +197,21 @@ export const CartPage: React.FC<CartPageProps> = ({
         };
       }
 
+      // Show "Submitted" animated confirmation state
+      setSubmitPhase('submitted');
+
+      // Keep "Submitted" visible for 400ms before transition
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
       clearCart();
       setIsSubmitting(false);
+      setSubmitPhase('idle');
       onOrderSuccess(placedOrder);
     } catch (err: any) {
+      setSubmitPhase('failed');
       setIsSubmitting(false);
       setErrorMessage(err.message || 'অর্ডার করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+      setTimeout(() => setSubmitPhase('idle'), 2500);
     }
   };
 
@@ -559,14 +577,40 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition-all shadow-md shadow-emerald-700/20 flex items-center justify-center space-x-2 mt-4 active:scale-98"
+                  className={`w-full font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition-all shadow-md flex items-center justify-center space-x-2 mt-4 active:scale-98 ${
+                    submitPhase === 'submitted'
+                      ? 'bg-emerald-600 text-white ring-4 ring-emerald-400/40 shadow-emerald-600/40 animate-pulse'
+                      : submitPhase === 'failed'
+                      ? 'bg-rose-600 text-white shadow-rose-600/20'
+                      : 'bg-emerald-700 hover:bg-emerald-800 disabled:opacity-75 text-white shadow-emerald-700/20'
+                  }`}
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>
-                    {isSubmitting
-                      ? 'অর্ডার প্রসেস হচ্ছে...'
-                      : `অর্ডার নিশ্চিত করুন (${formatBDT(totalAmount)})`}
-                  </span>
+                  {submitPhase === 'loading' && (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>অর্ডার প্রসেস হচ্ছে...</span>
+                    </>
+                  )}
+                  {submitPhase === 'submitted' && (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-white animate-bounce" />
+                      <span className="font-extrabold text-sm tracking-wide">
+                        ✅ Submitted! (অর্ডার নিশ্চিত হয়েছে)
+                      </span>
+                    </>
+                  )}
+                  {submitPhase === 'failed' && (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-white" />
+                      <span>অর্ডার ব্যর্থ হয়েছে</span>
+                    </>
+                  )}
+                  {submitPhase === 'idle' && (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>অর্ডার নিশ্চিত করুন ({formatBDT(totalAmount)})</span>
+                    </>
+                  )}
                 </button>
               )}
             </form>

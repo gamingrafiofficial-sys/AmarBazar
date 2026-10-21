@@ -19,8 +19,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [role, setRoleState] = useState<UserRole>('customer');
-  const [profile, setProfile] = useState<UserProfile>(SEED_DEMO_USERS['customer']);
+  const [role, setRoleState] = useState<UserRole>(() => {
+    try {
+      const savedRole = localStorage.getItem('amar_auth_role');
+      if (savedRole === 'admin' || savedRole === 'rider' || savedRole === 'customer' || savedRole === 'shopkeeper') {
+        return savedRole;
+      }
+    } catch {}
+    return 'customer';
+  });
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    try {
+      const savedRole = (localStorage.getItem('amar_auth_role') as UserRole) || 'customer';
+      return SEED_DEMO_USERS[savedRole] || SEED_DEMO_USERS['customer'];
+    } catch {
+      return SEED_DEMO_USERS['customer'];
+    }
+  });
   const [isFirebaseLoading, setIsFirebaseLoading] = useState<boolean>(true);
   const isFirebaseConfigured = true;
 
@@ -42,9 +57,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
-        if (isAdminEmail) setRoleState('admin');
+        if (isAdminEmail) {
+          setRoleState('admin');
+          try {
+            localStorage.setItem('amar_auth_role', 'admin');
+          } catch {}
+        }
       } else {
-        // Default to active demo profile for the selected role
+        // Default to active profile for the selected persistent role
         setProfile(SEED_DEMO_USERS[role] || SEED_DEMO_USERS['customer']);
       }
     });
@@ -54,8 +74,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setRole = (newRole: UserRole) => {
     setRoleState(newRole);
+    try {
+      localStorage.setItem('amar_auth_role', newRole);
+    } catch {}
     if (!currentUser) {
-      setProfile(SEED_DEMO_USERS[newRole]);
+      setProfile(SEED_DEMO_USERS[newRole] || SEED_DEMO_USERS['customer']);
     } else {
       setProfile((prev) => ({
         ...prev,
@@ -76,9 +99,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logOut = async () => {
     try {
       await signOut(auth);
-      setRole('customer');
     } catch (err) {
       console.error('Logout error:', err);
+    } finally {
+      try {
+        localStorage.removeItem('amar_auth_role');
+        localStorage.removeItem('amar_active_customer');
+        localStorage.removeItem('amar_active_rider');
+      } catch {}
+      setRoleState('customer');
+      setProfile(SEED_DEMO_USERS['customer']);
     }
   };
 

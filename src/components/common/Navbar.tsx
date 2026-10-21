@@ -24,6 +24,7 @@ interface NavbarProps {
   selectedAreaName: string;
   onOpenAreaSelector: () => void;
   loggedInCustomer?: CustomerAccount | null;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,15 +35,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedAreaName,
   onOpenAreaSelector,
   loggedInCustomer,
+  onLogout,
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { role, setRole, logOut } = useAuth();
   const { itemCount } = useCart();
 
   const handleLogout = () => {
-    logOut();
-    setRole('customer');
-    onGoHome();
+    if (onLogout) {
+      onLogout();
+    } else {
+      logOut();
+      setRole('customer');
+      onGoHome();
+    }
   };
 
   return (

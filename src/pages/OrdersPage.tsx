@@ -52,7 +52,9 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
   const handleConfirmCancel = async () => {
     if (!cancelOrderId || !cancelReason.trim()) return;
     setIsCancelling(true);
+    const minAnim = new Promise((r) => setTimeout(r, 250));
     await onCancelOrder(cancelOrderId, cancelReason);
+    await minAnim;
     setIsCancelling(false);
     setCancelOrderId(null);
     setCancelReason('');

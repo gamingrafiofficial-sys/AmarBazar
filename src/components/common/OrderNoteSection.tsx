@@ -24,7 +24,9 @@ export const OrderNoteSection: React.FC<OrderNoteSectionProps> = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const minAnim = new Promise((r) => setTimeout(r, 200));
       await onUpdateNote(orderId, draftNote.trim());
+      await minAnim;
       setIsEditing(false);
       setShowSavedNotification(true);
       setTimeout(() => setShowSavedNotification(false), 2500);

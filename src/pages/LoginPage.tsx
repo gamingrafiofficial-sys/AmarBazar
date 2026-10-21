@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   User,
   MapPin,
+  Loader2,
 } from 'lucide-react';
 
 interface LoginPageProps {
@@ -50,6 +51,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [authPhase, setAuthPhase] = useState<'idle' | 'loading' | 'success' | 'failed'>('idle');
+
+  const completeActionSuccess = async (callback: () => void) => {
+    setAuthPhase('success');
+    await new Promise((r) => setTimeout(r, 350));
+    setIsLoading(false);
+    setAuthPhase('idle');
+    callback();
+  };
+
+  const completeActionFail = (msg: string) => {
+    setAuthPhase('failed');
+    setIsLoading(false);
+    setErrorMessage(msg);
+    setTimeout(() => setAuthPhase('idle'), 2500);
+  };
 
   // 1. Single Unified Login Handler
   // Everyone (Admin, Delivery Rider, and Customer) logs in from this single online form
@@ -58,12 +75,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsLoading(true);
+    setAuthPhase('loading');
 
     const cleanIdentifier = identifier.trim();
     const cleanPass = password.trim();
 
     if (!cleanIdentifier) {
       setIsLoading(false);
+      setAuthPhase('idle');
       setErrorMessage(
         language === 'bn' ? 'দয়া করে আপনার নম্বর বা ইমেইল লিখুন।' : 'Please type your number or email.'
       );
@@ -72,11 +91,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     if (!cleanPass) {
       setIsLoading(false);
+      setAuthPhase('idle');
       setErrorMessage(
         language === 'bn' ? 'দয়া করে আপনার পাসওয়ার্ড লিখুন।' : 'Please type your password.'
       );
       return;
     }
+
+    const minAnimationPromise = new Promise((resolve) => setTimeout(resolve, 250));
 
     try {
       // Real Online Backend Authentication
@@ -90,22 +112,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       });
 
       const data = await res.json();
+      await minAnimationPromise;
 
       if (res.ok && data.success) {
-        setIsLoading(false);
         if (data.role === 'admin') {
-          onAdminLoginSuccess();
+          await completeActionSuccess(() => onAdminLoginSuccess());
           return;
         }
         if (data.role === 'rider') {
-          onRiderLoginSuccess(data.rider);
+          await completeActionSuccess(() => onRiderLoginSuccess(data.rider));
           return;
         }
         if (data.role === 'customer') {
           try {
             localStorage.setItem('amar_active_customer', JSON.stringify(data.customer));
+            localStorage.setItem('amar_auth_role', 'customer');
           } catch {}
-          onCustomerLoginSuccess(data.customer);
+          await completeActionSuccess(() => onCustomerLoginSuccess(data.customer));
           return;
         }
       } else {
@@ -137,12 +160,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               body: JSON.stringify(localRiderMatch),
             }).catch(() => {});
 
-            setIsLoading(false);
-            onRiderLoginSuccess(localRiderMatch);
+            await completeActionSuccess(() => onRiderLoginSuccess(localRiderMatch));
             return;
           } else {
-            setIsLoading(false);
-            setErrorMessage(
+            completeActionFail(
               language === 'bn'
                 ? 'রাইডার পাসওয়ার্ড সঠিক নয়। অ্যাডমিন কর্তৃক নির্ধারিত পাসওয়ার্ড দিন।'
                 : 'Incorrect rider password.'
@@ -151,11 +172,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           }
         }
 
-        setIsLoading(false);
-        setErrorMessage(data.error || (language === 'bn' ? 'লগইন করতে সমস্যা হয়েছে।' : 'Login failed.'));
+        completeActionFail(data.error || (language === 'bn' ? 'লগইন করতে সমস্যা হয়েছে।' : 'Login failed.'));
         return;
       }
     } catch {
+      await minAnimationPromise;
       // Fallback in case of temporary network restriction
       const normPhone = cleanIdentifier.replace(/[\s\-\+\(\)]/g, '').replace(/^(880|88)/, '0');
       const cleanRaw = cleanIdentifier.replace(/\s+/g, '');
@@ -165,8 +186,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         cleanIdentifierLower === ADMIN_CREDENTIALS.email.toLowerCase() &&
         cleanPass === ADMIN_CREDENTIALS.password
       ) {
-        setIsLoading(false);
-        onAdminLoginSuccess();
+        await completeActionSuccess(() => onAdminLoginSuccess());
         return;
       }
 
@@ -187,12 +207,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       if (matchingRider) {
         const expectedPass = (matchingRider.password || '123').trim();
         if (cleanPass === expectedPass || cleanPass === 'rider123' || cleanPass === '123') {
-          setIsLoading(false);
-          onRiderLoginSuccess(matchingRider);
+          await completeActionSuccess(() => onRiderLoginSuccess(matchingRider));
           return;
         } else {
-          setIsLoading(false);
-          setErrorMessage(language === 'bn' ? 'রাইডার পাসওয়ার্ড সঠিক নয়।' : 'Incorrect password');
+          completeActionFail(language === 'bn' ? 'রাইডার পাসওয়ার্ড সঠিক নয়।' : 'Incorrect password');
           return;
         }
       }
@@ -200,15 +218,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       if (normPhone.length >= 11) {
         const stored = localStorage.getItem(`customer_${normPhone}`);
         if (stored) {
-          setIsLoading(false);
           const customer = JSON.parse(stored);
-          onCustomerLoginSuccess(customer);
+          await completeActionSuccess(() => onCustomerLoginSuccess(customer));
           return;
         }
       }
 
-      setIsLoading(false);
-      setErrorMessage(
+      completeActionFail(
         language === 'bn'
           ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। সঠিক নম্বর দিন অথবা রেজিস্ট্রেশন করুন।'
           : 'Invalid number or password. Please try again.'
@@ -222,6 +238,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsLoading(true);
+    setAuthPhase('loading');
 
     const name = regName.trim();
     const phone = regPhone.trim().replace(/\s+/g, '');
@@ -230,6 +247,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     if (!name || name.length < 2) {
       setIsLoading(false);
+      setAuthPhase('idle');
       setErrorMessage(
         language === 'bn' ? 'আপনার নাম সঠিকভাবে লিখুন।' : 'Please enter your full name.'
       );
@@ -238,6 +256,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     if (!phone || phone.length < 11) {
       setIsLoading(false);
+      setAuthPhase('idle');
       setErrorMessage(
         language === 'bn'
           ? 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017xxxxxxxx)।'
@@ -248,6 +267,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     if (!address || address.length < 4) {
       setIsLoading(false);
+      setAuthPhase('idle');
       setErrorMessage(
         language === 'bn'
           ? 'আপনার বিস্তারিত ডেলিভারি ঠিকানা দিন।'
@@ -258,11 +278,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     if (!pass || pass.length < 4) {
       setIsLoading(false);
+      setAuthPhase('idle');
       setErrorMessage(
         language === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের দিন।' : 'Password must be at least 4 characters.'
       );
       return;
     }
+
+    const minAnimationPromise = new Promise((resolve) => setTimeout(resolve, 250));
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -278,11 +301,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       });
 
       const data = await res.json();
+      await minAnimationPromise;
 
       if (res.ok && data.success) {
-        setIsLoading(false);
         try {
           localStorage.setItem('amar_active_customer', JSON.stringify(data.customer));
+          localStorage.setItem('amar_auth_role', 'customer');
           localStorage.setItem(`customer_${phone}`, JSON.stringify(data.customer));
         } catch {}
 
@@ -292,16 +316,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             : 'Registration complete! Welcome to AmarBazaar.'
         );
 
-        setTimeout(() => {
-          onCustomerLoginSuccess(data.customer);
-        }, 500);
+        await completeActionSuccess(() => onCustomerLoginSuccess(data.customer));
       } else {
-        setIsLoading(false);
-        // Duplicate number error or validation error from online database
-        setErrorMessage(data.error || 'রেজিস্ট্রেশন করতে সমস্যা হয়েছে।');
+        completeActionFail(data.error || 'রেজিস্ট্রেশন করতে সমস্যা হয়েছে।');
       }
     } catch {
-      setIsLoading(false);
+      await minAnimationPromise;
       // Fallback
       const newCustomer: CustomerAccount = {
         id: `cust-${Date.now().toString().slice(-5)}`,
@@ -315,11 +335,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       try {
         localStorage.setItem(`customer_${phone}`, JSON.stringify(newCustomer));
         localStorage.setItem('amar_active_customer', JSON.stringify(newCustomer));
+        localStorage.setItem('amar_auth_role', 'customer');
       } catch {}
       setSuccessMessage('রেজিস্ট্রেশন সম্পন্ন হয়েছে!');
-      setTimeout(() => {
-        onCustomerLoginSuccess(newCustomer);
-      }, 500);
+      await completeActionSuccess(() => onCustomerLoginSuccess(newCustomer));
     }
   };
 
@@ -424,11 +443,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all shadow-md shadow-emerald-700/20 active:scale-98"
+                className={`w-full mt-2 font-bold py-3.5 px-4 rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all shadow-md active:scale-98 ${
+                  authPhase === 'success'
+                    ? 'bg-emerald-600 text-white ring-4 ring-emerald-400/40 shadow-emerald-600/40 animate-pulse'
+                    : authPhase === 'failed'
+                    ? 'bg-rose-600 text-white shadow-rose-600/20'
+                    : 'bg-emerald-700 hover:bg-emerald-800 disabled:opacity-75 text-white shadow-emerald-700/20'
+                }`}
               >
-                {isLoading ? (
-                  <span>প্রবেশ করা হচ্ছে...</span>
-                ) : (
+                {authPhase === 'loading' && (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>যাচাই ও প্রবেশ করা হচ্ছে...</span>
+                  </>
+                )}
+                {authPhase === 'success' && (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-white animate-bounce" />
+                    <span className="font-extrabold text-sm">✅ লগইন সফল! প্রবেশ করা হচ্ছে...</span>
+                  </>
+                )}
+                {authPhase === 'failed' && (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-white" />
+                    <span>লগইন ব্যর্থ হয়েছে</span>
+                  </>
+                )}
+                {authPhase === 'idle' && (
                   <>
                     <span>লগইন করুন</span>
                     <ArrowRight className="w-4 h-4" />
@@ -535,11 +576,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all shadow-md shadow-emerald-700/20 active:scale-98"
+                className={`w-full mt-2 font-bold py-3 px-4 rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all shadow-md active:scale-98 ${
+                  authPhase === 'success'
+                    ? 'bg-emerald-600 text-white ring-4 ring-emerald-400/40 shadow-emerald-600/40 animate-pulse'
+                    : authPhase === 'failed'
+                    ? 'bg-rose-600 text-white shadow-rose-600/20'
+                    : 'bg-emerald-700 hover:bg-emerald-800 disabled:opacity-75 text-white shadow-emerald-700/20'
+                }`}
               >
-                {isLoading ? (
-                  <span>অ্যাকাউন্ট তৈরি হচ্ছে...</span>
-                ) : (
+                {authPhase === 'loading' && (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>অ্যাকাউন্ট তৈরি হচ্ছে...</span>
+                  </>
+                )}
+                {authPhase === 'success' && (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-white animate-bounce" />
+                    <span className="font-extrabold text-sm">✅ রেজিস্ট্রেশন সম্পন্ন হয়েছে!</span>
+                  </>
+                )}
+                {authPhase === 'failed' && (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-white" />
+                    <span>রেজিস্ট্রেশন ব্যর্থ হয়েছে</span>
+                  </>
+                )}
+                {authPhase === 'idle' && (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
                     <span>একাউন্ট তৈরি করুন</span>

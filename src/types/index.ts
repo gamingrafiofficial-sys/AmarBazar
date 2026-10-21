@@ -59,6 +59,7 @@ export interface DeliveryRiderAccount {
   assignedUnionIds: string[]; // List of assigned union IDs for order routing
   isOnline: boolean;
   isActive: boolean;
+  deactivatedReason?: string;
   createdAt: string;
 }
 
