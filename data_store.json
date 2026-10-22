@@ -1,6 +1,42 @@
 {
   "customers": [
     {
+      "id": "cust-081407",
+      "name": "Local User",
+      "phone": "01899112233",
+      "address": "কালীগঞ্জ",
+      "password": "offlinepass",
+      "areaId": "kaliganj",
+      "createdAt": "2026-10-21T13:41:21.407Z"
+    },
+    {
+      "id": "cust-057688",
+      "name": "জাকির হোসেন",
+      "phone": "01766554433",
+      "address": "কালীগঞ্জ বাজার",
+      "password": "pass1234password",
+      "areaId": "kaliganj",
+      "createdAt": "2026-10-21T13:40:57.688Z"
+    },
+    {
+      "id": "cust-046263",
+      "name": "রফিক ইসলাম",
+      "phone": "01711223344",
+      "address": "কালীগঞ্জ",
+      "password": "mypassword123",
+      "areaId": "kaliganj",
+      "createdAt": "2026-10-21T13:40:46.263Z"
+    },
+    {
+      "id": "cust-698537",
+      "name": "Test User",
+      "phone": "01799887766",
+      "address": "কালীগঞ্জ",
+      "password": "testpassword123",
+      "areaId": "kaliganj",
+      "createdAt": "2026-10-21T13:34:58.537Z"
+    },
+    {
       "id": "cust-497506",
       "name": "হাসান মাহমুদ",
       "phone": "01955667788",
@@ -151,6 +187,43 @@
       "isOnline": true,
       "isActive": true,
       "createdAt": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "rider-03",
+      "name": "মোঃ জাহিদ হোসেন (কালীগঞ্জ)",
+      "phone": "01919998877",
+      "password": "123",
+      "area": "kaliganj",
+      "thanaId": "kaliganj",
+      "assignedUnionIds": [
+        "jangalia",
+        "bahadurshadi",
+        "nagari",
+        "baktarpur"
+      ],
+      "isOnline": true,
+      "isActive": true,
+      "createdAt": "2026-01-02T00:00:00Z"
+    },
+    {
+      "id": "rider-04",
+      "name": "মোঃ মিলন মিয়া (কাপাসিয়া)",
+      "phone": "01619998877",
+      "password": "123",
+      "area": "kapasia",
+      "thanaId": "kapasia",
+      "assignedUnionIds": [
+        "targaon",
+        "barishaba",
+        "karihata",
+        "sanmania",
+        "rayed",
+        "singhashree",
+        "ghagatia"
+      ],
+      "isOnline": true,
+      "isActive": true,
+      "createdAt": "2026-01-02T00:00:00Z"
     }
   ]
 }

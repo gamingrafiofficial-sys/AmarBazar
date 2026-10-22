@@ -53,13 +53,34 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
 
-  // Filter orders specifically for this customer
+  // Filter orders specifically for this customer and deduplicate
   const cleanCustomerPhone = customer.phone.replace(/\s+/g, '');
-  const customerOrders = orders.filter(
-    (o) =>
-      o.customerId === customer.id ||
-      (o.customerPhone && o.customerPhone.replace(/\s+/g, '') === cleanCustomerPhone)
-  );
+  const customerOrders = React.useMemo(() => {
+    if (!Array.isArray(orders)) return [];
+    const map = new Map<string, Order>();
+    for (const o of orders) {
+      if (
+        o &&
+        o.id &&
+        (o.customerId === customer.id ||
+          (o.customerPhone && o.customerPhone.replace(/\s+/g, '') === cleanCustomerPhone))
+      ) {
+        if (!map.has(o.id)) {
+          map.set(o.id, o);
+        } else {
+          const existing = map.get(o.id)!;
+          const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+          const incomingTime = new Date(o.updatedAt || o.createdAt || 0).getTime();
+          if (incomingTime >= existingTime) {
+            map.set(o.id, o);
+          }
+        }
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [orders, customer.id, cleanCustomerPhone]);
 
   // Stats calculation
   const totalOrdersCount = customerOrders.length;
@@ -286,7 +307,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {displayedOrders.map((order) => {
+            {displayedOrders.map((order, idx) => {
               const step = getProgressStep(order.orderStatus);
               const isCancelled =
                 order.orderStatus === 'cancelled' ||
@@ -295,7 +316,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
               return (
                 <div
-                  key={order.id}
+                  key={`${order.id}-${idx}`}
                   className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-xs transition-all hover:shadow-sm"
                 >
                   {/* Top line: Order ID, Date & Status */}
@@ -437,8 +458,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-4">
                     <p className="text-[11px] font-bold text-slate-500 mb-2">পণ্যের তালিকা:</p>
                     <div className="divide-y divide-slate-200/70 text-xs">
-                      {order.items.map((item) => (
-                        <div key={item.productId} className="py-1.5 flex justify-between">
+                      {order.items.map((item, itemIdx) => (
+                        <div key={`${item.productId}-${itemIdx}`} className="py-1.5 flex justify-between">
                           <span className="text-slate-800 font-medium">
                             {item.nameBn} <span className="text-slate-400">({item.quantity} {item.unit})</span>
                           </span>

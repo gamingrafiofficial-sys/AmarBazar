@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 import { ADMIN_CREDENTIALS } from '../data/seedData';
 import { DeliveryRiderAccount, CustomerAccount } from '../types';
+import { normalizePhone, isValidBangladeshiPhone } from '../lib/phone';
+import {
+  registerCustomerOnline,
+  loginUnifiedOnline,
+} from '../services/firestoreService';
 import {
   Lock,
   Phone,
@@ -65,11 +70,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setAuthPhase('failed');
     setIsLoading(false);
     setErrorMessage(msg);
-    setTimeout(() => setAuthPhase('idle'), 2500);
+    setTimeout(() => setAuthPhase('idle'), 3000);
   };
 
-  // 1. Single Unified Login Handler
-  // Everyone (Admin, Delivery Rider, and Customer) logs in from this single online form
+  // 1. Single Unified Login Handler using Firebase Database Online
   const handleUnifiedLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -101,138 +105,70 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const minAnimationPromise = new Promise((resolve) => setTimeout(resolve, 250));
 
     try {
-      // Real Online Backend Authentication
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: cleanIdentifier,
-          password: cleanPass,
-        }),
-      });
-
-      const data = await res.json();
+      // 1. Authenticate directly via Firebase Firestore database
+      const onlineAuthResult = await loginUnifiedOnline(cleanIdentifier, cleanPass);
       await minAnimationPromise;
 
-      if (res.ok && data.success) {
-        if (data.role === 'admin') {
-          await completeActionSuccess(() => onAdminLoginSuccess());
-          return;
-        }
-        if (data.role === 'rider') {
-          await completeActionSuccess(() => onRiderLoginSuccess(data.rider));
-          return;
-        }
-        if (data.role === 'customer') {
-          try {
-            localStorage.setItem('amar_active_customer', JSON.stringify(data.customer));
-            localStorage.setItem('amar_auth_role', 'customer');
-          } catch {}
-          await completeActionSuccess(() => onCustomerLoginSuccess(data.customer));
-          return;
-        }
-      } else {
-        // If server returns error, check registeredRiders or local persistent storage
-        const normPhone = cleanIdentifier.replace(/[\s\-\+\(\)]/g, '').replace(/^(880|88)/, '0');
-        const rawPhone = cleanIdentifier.replace(/\s+/g, '');
-
-        let allRiders = [...registeredRiders];
-        try {
-          const stored = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
-          if (Array.isArray(stored)) {
-            allRiders = [...allRiders, ...stored];
-          }
-        } catch {}
-
-        const localRiderMatch = allRiders.find((r) => {
-          const rNorm = (r.phone || '').replace(/[\s\-\+\(\)]/g, '').replace(/^(880|88)/, '0');
-          const rRaw = (r.phone || '').replace(/\s+/g, '');
-          return rNorm === normPhone || rRaw === rawPhone || r.phone === cleanIdentifier;
-        });
-
-        if (localRiderMatch) {
-          const expectedPass = (localRiderMatch.password || '123').trim();
-          if (cleanPass === expectedPass || cleanPass === 'rider123' || cleanPass === '123') {
-            // Background sync to server
-            fetch('/api/admin/riders/register', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(localRiderMatch),
-            }).catch(() => {});
-
-            await completeActionSuccess(() => onRiderLoginSuccess(localRiderMatch));
-            return;
-          } else {
-            completeActionFail(
-              language === 'bn'
-                ? 'রাইডার পাসওয়ার্ড সঠিক নয়। অ্যাডমিন কর্তৃক নির্ধারিত পাসওয়ার্ড দিন।'
-                : 'Incorrect rider password.'
-            );
-            return;
-          }
-        }
-
-        completeActionFail(data.error || (language === 'bn' ? 'লগইন করতে সমস্যা হয়েছে।' : 'Login failed.'));
-        return;
-      }
-    } catch {
-      await minAnimationPromise;
-      // Fallback in case of temporary network restriction
-      const normPhone = cleanIdentifier.replace(/[\s\-\+\(\)]/g, '').replace(/^(880|88)/, '0');
-      const cleanRaw = cleanIdentifier.replace(/\s+/g, '');
-      const cleanIdentifierLower = cleanIdentifier.toLowerCase();
-
-      if (
-        cleanIdentifierLower === ADMIN_CREDENTIALS.email.toLowerCase() &&
-        cleanPass === ADMIN_CREDENTIALS.password
-      ) {
+      if (onlineAuthResult.role === 'admin') {
         await completeActionSuccess(() => onAdminLoginSuccess());
         return;
       }
-
-      let allRiders = [...registeredRiders];
+      if (onlineAuthResult.role === 'rider' && onlineAuthResult.rider) {
+        await completeActionSuccess(() => onRiderLoginSuccess(onlineAuthResult.rider!));
+        return;
+      }
+      if (onlineAuthResult.role === 'customer' && onlineAuthResult.customer) {
+        await completeActionSuccess(() => onCustomerLoginSuccess(onlineAuthResult.customer!));
+        return;
+      }
+    } catch (fireErr: any) {
+      // Fallback check against backend endpoint (which also reads from database)
       try {
-        const stored = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
-        if (Array.isArray(stored)) {
-          allRiders = [...allRiders, ...stored];
-        }
-      } catch {}
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: cleanIdentifier,
+            password: cleanPass,
+          }),
+        });
+        const data = await res.json();
+        await minAnimationPromise;
 
-      const matchingRider = allRiders.find((r) => {
-        const rNorm = (r.phone || '').replace(/[\s\-\+\(\)]/g, '').replace(/^(880|88)/, '0');
-        const rRaw = (r.phone || '').replace(/\s+/g, '');
-        return rNorm === normPhone || rRaw === cleanRaw || r.phone === cleanIdentifier;
-      });
-
-      if (matchingRider) {
-        const expectedPass = (matchingRider.password || '123').trim();
-        if (cleanPass === expectedPass || cleanPass === 'rider123' || cleanPass === '123') {
-          await completeActionSuccess(() => onRiderLoginSuccess(matchingRider));
-          return;
+        if (res.ok && data.success) {
+          if (data.role === 'admin') {
+            await completeActionSuccess(() => onAdminLoginSuccess());
+            return;
+          }
+          if (data.role === 'rider') {
+            await completeActionSuccess(() => onRiderLoginSuccess(data.rider));
+            return;
+          }
+          if (data.role === 'customer') {
+            await completeActionSuccess(() => onCustomerLoginSuccess(data.customer));
+            return;
+          }
         } else {
-          completeActionFail(language === 'bn' ? 'রাইডার পাসওয়ার্ড সঠিক নয়।' : 'Incorrect password');
+          completeActionFail(
+            fireErr?.message ||
+              data.error ||
+              (language === 'bn' ? 'লগইন করতে সমস্যা হয়েছে।' : 'Login failed.')
+          );
           return;
         }
+      } catch {
+        await minAnimationPromise;
+        completeActionFail(
+          fireErr?.message ||
+            (language === 'bn'
+              ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। সঠিক নম্বর দিন অথবা রেজিস্ট্রেশন করুন।'
+              : 'Invalid number or password. Please try again.')
+        );
       }
-
-      if (normPhone.length >= 11) {
-        const stored = localStorage.getItem(`customer_${normPhone}`);
-        if (stored) {
-          const customer = JSON.parse(stored);
-          await completeActionSuccess(() => onCustomerLoginSuccess(customer));
-          return;
-        }
-      }
-
-      completeActionFail(
-        language === 'bn'
-          ? 'এই নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি। সঠিক নম্বর দিন অথবা রেজিস্ট্রেশন করুন।'
-          : 'Invalid number or password. Please try again.'
-      );
     }
   };
 
-  // 2. Customer Registration Submit (Enforcing One Account Per Phone Number)
+  // 2. Customer Registration Submit to Firebase Database Online
   const handleCustomerRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -241,7 +177,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setAuthPhase('loading');
 
     const name = regName.trim();
-    const phone = regPhone.trim().replace(/\s+/g, '');
+    const normPhone = normalizePhone(regPhone);
     const address = regAddress.trim();
     const pass = regPassword.trim();
 
@@ -254,13 +190,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    if (!phone || phone.length < 11) {
+    if (!normPhone || normPhone.length !== 11 || !normPhone.startsWith('01')) {
       setIsLoading(false);
       setAuthPhase('idle');
       setErrorMessage(
         language === 'bn'
-          ? 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017xxxxxxxx)।'
-          : 'Please provide valid 11-digit mobile number.'
+          ? 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017xxxxxxxx বা ০১৭xxxxxxxx)।'
+          : 'Please provide valid 11-digit Bangladeshi mobile number.'
       );
       return;
     }
@@ -288,57 +224,72 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const minAnimationPromise = new Promise((resolve) => setTimeout(resolve, 250));
 
     try {
-      const res = await fetch('/api/auth/register', {
+      // 1. Direct Firebase Firestore Registration
+      const newCustomer = await registerCustomerOnline({
+        name,
+        phone: normPhone,
+        address,
+        password: pass,
+        areaId: 'kaliganj',
+      });
+
+      // Background notification to backend
+      fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          phone,
+          phone: normPhone,
           address,
           password: pass,
           areaId: 'kaliganj',
         }),
-      });
+      }).catch(() => {});
 
-      const data = await res.json();
       await minAnimationPromise;
 
-      if (res.ok && data.success) {
-        try {
-          localStorage.setItem('amar_active_customer', JSON.stringify(data.customer));
-          localStorage.setItem('amar_auth_role', 'customer');
-          localStorage.setItem(`customer_${phone}`, JSON.stringify(data.customer));
-        } catch {}
+      setSuccessMessage(
+        language === 'bn'
+          ? 'ফায়ারবেস ডেটাবেসে রেজিস্ট্রেশন সফল হয়েছে! স্বাগতম আমারবাজারে।'
+          : 'Registration completed in Firebase online database! Welcome to AmarBazaar.'
+      );
 
-        setSuccessMessage(
-          language === 'bn'
-            ? 'রেজিস্ট্রেশন সম্পন্ন হয়েছে! স্বাগতম আমারবাজারে।'
-            : 'Registration complete! Welcome to AmarBazaar.'
-        );
-
-        await completeActionSuccess(() => onCustomerLoginSuccess(data.customer));
-      } else {
-        completeActionFail(data.error || 'রেজিস্ট্রেশন করতে সমস্যা হয়েছে।');
-      }
-    } catch {
-      await minAnimationPromise;
-      // Fallback
-      const newCustomer: CustomerAccount = {
-        id: `cust-${Date.now().toString().slice(-5)}`,
-        name,
-        phone,
-        address,
-        password: pass,
-        areaId: 'kaliganj',
-        createdAt: new Date().toISOString(),
-      };
-      try {
-        localStorage.setItem(`customer_${phone}`, JSON.stringify(newCustomer));
-        localStorage.setItem('amar_active_customer', JSON.stringify(newCustomer));
-        localStorage.setItem('amar_auth_role', 'customer');
-      } catch {}
-      setSuccessMessage('রেজিস্ট্রেশন সম্পন্ন হয়েছে!');
       await completeActionSuccess(() => onCustomerLoginSuccess(newCustomer));
+    } catch (fireErr: any) {
+      // If direct firestore returned error or network restriction, try server endpoint
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            phone: normPhone,
+            address,
+            password: pass,
+            areaId: 'kaliganj',
+          }),
+        });
+        const data = await res.json();
+        await minAnimationPromise;
+
+        if (res.ok && data.success) {
+          setSuccessMessage(
+            language === 'bn'
+              ? 'রেজিস্ট্রেশন সম্পন্ন হয়েছে! স্বাগতম আমারবাজারে।'
+              : 'Registration complete! Welcome to AmarBazaar.'
+          );
+          await completeActionSuccess(() => onCustomerLoginSuccess(data.customer));
+        } else {
+          completeActionFail(
+            fireErr?.message || data.error || 'রেজিস্ট্রেশন করতে সমস্যা হয়েছে।'
+          );
+        }
+      } catch (err: any) {
+        await minAnimationPromise;
+        completeActionFail(
+          fireErr?.message || err?.message || 'রেজিস্ট্রেশন করতে সমস্যা হয়েছে।'
+        );
+      }
     }
   };
 

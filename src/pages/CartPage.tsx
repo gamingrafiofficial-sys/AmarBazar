@@ -161,7 +161,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       } else {
         // Fallback robust order creation
         placedOrder = {
-          id: `AB-${Date.now().toString().slice(-6)}`,
+          id: `AB-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`,
           customerId: payload.customerId,
           shopId: 'admin-store',
           marketId: selectedThanaId,

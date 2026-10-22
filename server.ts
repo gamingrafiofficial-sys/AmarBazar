@@ -46,17 +46,10 @@ export const inMemoryDB = {
   auditLogs: [] as any[],
 };
 
-// Helper: Normalize Bangladeshi phone numbers (e.g. +88017..., 88017..., 017...)
-export function normalizePhone(phone: string): string {
-  if (!phone) return '';
-  let clean = phone.toString().replace(/[\s\-\+\(\)]/g, '');
-  if (clean.startsWith('880')) {
-    clean = '0' + clean.slice(3);
-  } else if (clean.startsWith('88')) {
-    clean = clean.slice(2);
-  }
-  return clean;
-}
+import { normalizePhone, convertBengaliDigits, isValidBangladeshiPhone } from './src/lib/phone';
+import { db } from './src/lib/firebase';
+import { doc, setDoc, getDocs, collection, query, where } from 'firebase/firestore';
+export { normalizePhone };
 
 // Helper: Load persistent database if exists
 function loadPersistentStore() {
@@ -65,7 +58,21 @@ function loadPersistentStore() {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed.customers) && parsed.customers.length > 0) {
-        inMemoryDB.customers = parsed.customers;
+        // Merge persistent customers with seed customers
+        const existingPhones = new Set(parsed.customers.map((c: any) => normalizePhone(c.phone)));
+        const combined = parsed.customers.map((c: any) => ({
+          ...c,
+          phone: normalizePhone(c.phone),
+        }));
+        for (const sc of SEED_CUSTOMERS) {
+          if (!existingPhones.has(normalizePhone(sc.phone))) {
+            combined.push({
+              ...sc,
+              phone: normalizePhone(sc.phone),
+            });
+          }
+        }
+        inMemoryDB.customers = combined;
       }
       if (Array.isArray(parsed.orders) && parsed.orders.length > 0) {
         inMemoryDB.orders = parsed.orders;
@@ -120,7 +127,7 @@ inMemoryDB.orders
 // --- API ENDPOINTS ---
 
 // 1. ONLINE AUTH: Customer Registration (Enforcing: One Account Per Phone Number)
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, phone, address, password, areaId } = req.body;
 
@@ -128,9 +135,9 @@ app.post('/api/auth/register', (req, res) => {
       return res.status(400).json({ error: 'সঠিক মোবাইল নম্বর প্রদান করুন।' });
     }
 
-    const cleanPhone = phone.trim().replace(/\s+/g, '');
-    if (cleanPhone.length < 11) {
-      return res.status(400).json({ error: '১১ ডিজিটের সঠিক মোবাইল নম্বর দিন।' });
+    const normPhone = normalizePhone(phone);
+    if (normPhone.length !== 11 || !normPhone.startsWith('01')) {
+      return res.status(400).json({ error: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017xxxxxxxx)।' });
     }
 
     if (!name || name.trim().length < 2) {
@@ -141,9 +148,9 @@ app.post('/api/auth/register', (req, res) => {
       return res.status(400).json({ error: 'পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।' });
     }
 
-    // STRICT CHECK: "একটি নাম্বার দিয়ে একটি একাউন্ট" (One account per phone number)
+    // STRICT CHECK in memory or Firestore
     const alreadyExists = inMemoryDB.customers.some(
-      (c) => c.phone.replace(/\s+/g, '') === cleanPhone
+      (c) => normalizePhone(c.phone) === normPhone
     );
 
     if (alreadyExists) {
@@ -152,10 +159,11 @@ app.post('/api/auth/register', (req, res) => {
       });
     }
 
+    const docId = `cust-${normPhone}`;
     const newCustomer: CustomerAccount = {
-      id: `cust-${Date.now().toString().slice(-6)}`,
+      id: docId,
       name: name.trim(),
-      phone: cleanPhone,
+      phone: normPhone,
       address: (address || 'কালীগঞ্জ, গাজীপুর').trim(),
       password: password.trim(),
       areaId: areaId || 'kaliganj',
@@ -164,6 +172,13 @@ app.post('/api/auth/register', (req, res) => {
 
     inMemoryDB.customers.unshift(newCustomer);
     savePersistentStore();
+
+    // Persist to Firebase Firestore Online Database
+    try {
+      await setDoc(doc(db, 'customers', docId), newCustomer);
+    } catch (fireErr) {
+      console.warn('Firestore server registration sync warn:', fireErr);
+    }
 
     res.status(201).json({
       success: true,
@@ -175,8 +190,52 @@ app.post('/api/auth/register', (req, res) => {
   }
 });
 
+// Sync client-persisted customer to server (Offline/Online Sync)
+app.post('/api/auth/sync-customer', async (req, res) => {
+  try {
+    const { customer } = req.body;
+    if (!customer || !customer.phone) {
+      return res.status(400).json({ error: 'Invalid customer data' });
+    }
+    const normPhone = normalizePhone(customer.phone);
+    const docId = customer.id || `cust-${normPhone}`;
+
+    const existingIndex = inMemoryDB.customers.findIndex(
+      (c) => normalizePhone(c.phone) === normPhone
+    );
+
+    const syncedCustomer: CustomerAccount = {
+      id: docId,
+      name: (customer.name || 'সম্মানিত গ্রাহক').trim(),
+      phone: normPhone,
+      address: (customer.address || 'কালীগঞ্জ').trim(),
+      password: (customer.password || '').trim(),
+      areaId: customer.areaId || 'kaliganj',
+      createdAt: customer.createdAt || new Date().toISOString(),
+    };
+
+    if (existingIndex === -1) {
+      inMemoryDB.customers.unshift(syncedCustomer);
+    } else {
+      inMemoryDB.customers[existingIndex] = {
+        ...inMemoryDB.customers[existingIndex],
+        ...syncedCustomer,
+      };
+    }
+    savePersistentStore();
+
+    try {
+      await setDoc(doc(db, 'customers', docId), syncedCustomer);
+    } catch (e) {}
+
+    return res.json({ success: true, customer: syncedCustomer });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Sync failed' });
+  }
+});
+
 // 2. ONLINE AUTH: Single Unified Login (100% Working for Customer, Rider, and Admin)
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
@@ -210,14 +269,25 @@ app.post('/api/auth/login', (req, res) => {
 
     // B. DELIVERY RIDER LOGIN (Matches registered rider phone & password)
     // Check if phone belongs to any registered rider
-    const matchingRider = inMemoryDB.riders.find(
+    let matchingRider = inMemoryDB.riders.find(
       (r) =>
         normalizePhone(r.phone) === normalizedId ||
         r.phone.replace(/\s+/g, '') === cleanIdentifier.replace(/\s+/g, '')
     );
 
+    if (!matchingRider) {
+      try {
+        const qRider = query(collection(db, 'riders'), where('phone', '==', normalizedId));
+        const rSnap = await getDocs(qRider);
+        if (!rSnap.empty) {
+          matchingRider = rSnap.docs[0].data() as DeliveryRiderAccount;
+          inMemoryDB.riders.unshift(matchingRider);
+        }
+      } catch (e) {}
+    }
+
     if (matchingRider) {
-      const expectedPassword = matchingRider.password || '123';
+      const expectedPassword = (matchingRider.password || '123').trim();
       const isPasswordCorrect =
         cleanPass === expectedPassword ||
         cleanPass === 'rider123' ||
@@ -237,14 +307,27 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     // C. CUSTOMER LOGIN (Matches registered customer by phone)
-    const customer = inMemoryDB.customers.find(
-      (c) =>
-        normalizePhone(c.phone) === normalizedId ||
+    let customer = inMemoryDB.customers.find((c) => {
+      const cNorm = normalizePhone(c.phone);
+      return (
+        cNorm === normalizedId ||
         c.phone.replace(/\s+/g, '') === cleanIdentifier.replace(/\s+/g, '')
-    );
+      );
+    });
+
+    if (!customer) {
+      try {
+        const qCust = query(collection(db, 'customers'), where('phone', '==', normalizedId));
+        const cSnap = await getDocs(qCust);
+        if (!cSnap.empty) {
+          customer = cSnap.docs[0].data() as CustomerAccount;
+          inMemoryDB.customers.unshift(customer);
+        }
+      } catch (e) {}
+    }
 
     if (customer) {
-      if (customer.password && customer.password !== cleanPass) {
+      if (customer.password && customer.password.trim() !== cleanPass) {
         return res.status(401).json({
           error: 'পাসওয়ার্ড সঠিক নয়। দয়া করে সঠিক পাসওয়ার্ড দিন।',
         });
@@ -459,7 +542,7 @@ app.post('/api/orders/create', async (req, res) => {
     }
 
     // 5. Generate Order Document
-    const newOrderId = `AB-${Date.now().toString().slice(-6)}`;
+    const newOrderId = `AB-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`;
     const now = new Date().toISOString();
 
     const determinedThanaId = thanaId || marketId || targetShop.marketId;

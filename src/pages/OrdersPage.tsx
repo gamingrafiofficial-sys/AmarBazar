@@ -36,9 +36,40 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
   onUpdateOrderNote,
 }) => {
   const { language, formatBDT } = useLanguage();
-  const [selectedMemoOrder, setSelectedMemoOrder] = useState<Order | null>(orders[0] || null);
+
+  // Deduplicate orders to prevent duplicate key errors and inconsistent counts
+  const uniqueOrders = React.useMemo(() => {
+    if (!Array.isArray(orders)) return [];
+    const map = new Map<string, Order>();
+    for (const o of orders) {
+      if (o && o.id) {
+        if (!map.has(o.id)) {
+          map.set(o.id, o);
+        } else {
+          const existing = map.get(o.id)!;
+          const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+          const incomingTime = new Date(o.updatedAt || o.createdAt || 0).getTime();
+          if (incomingTime >= existingTime) {
+            map.set(o.id, o);
+          }
+        }
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [orders]);
+
+  const [selectedMemoOrder, setSelectedMemoOrder] = useState<Order | null>(uniqueOrders[0] || null);
   const [activeTab, setActiveTab] = useState<'list' | 'memo'>('list');
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
+
+  // Sync selectedMemoOrder if orders change
+  React.useEffect(() => {
+    if (uniqueOrders.length > 0 && (!selectedMemoOrder || !uniqueOrders.some((o) => o.id === selectedMemoOrder.id))) {
+      setSelectedMemoOrder(uniqueOrders[0]);
+    }
+  }, [uniqueOrders, selectedMemoOrder]);
 
   // Cancel prompt
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -89,7 +120,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
           >
-            অর্ডার তালিকা ({orders.length})
+            অর্ডার তালিকা ({uniqueOrders.length})
           </button>
 
           {selectedMemoOrder && (
@@ -116,7 +147,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
         </div>
       </div>
 
-      {orders.length === 0 ? (
+      {uniqueOrders.length === 0 ? (
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-md mx-auto my-8">
           <Package className="w-16 h-16 text-slate-300 mx-auto mb-3 stroke-1" />
           <h3 className="font-bold text-slate-800 text-base mb-1">
@@ -306,9 +337,9 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
       ) : (
         /* TAB 1: ALL ORDERS LIST */
         <div className="space-y-4 max-w-4xl mx-auto">
-          {orders.map((order) => (
+          {uniqueOrders.map((order, idx) => (
             <div
-              key={order.id}
+              key={`${order.id}-${idx}`}
               className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-xs hover:shadow-md transition-shadow"
             >
               <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 gap-2">
@@ -343,8 +374,8 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
 
               {/* Items summary */}
               <div className="py-3 text-xs text-slate-700 space-y-1">
-                {order.items.map((it) => (
-                  <div key={it.productId} className="flex justify-between">
+                {order.items.map((it, itemIdx) => (
+                  <div key={`${it.productId}-${itemIdx}`} className="flex justify-between">
                     <span>{it.nameBn} x {it.quantity} {it.unit}</span>
                     <span className="font-semibold">{formatBDT(it.lineTotal)}</span>
                   </div>

@@ -47,7 +47,7 @@ interface RiderDashboardProps {
 
 export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   rider,
-  allOrders,
+  allOrders: inputAllOrders,
   onAcceptOrder,
   onTransitionOrder,
   onToggleOnline,
@@ -57,6 +57,29 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   onLogout,
 }) => {
   const { language, formatBDT } = useLanguage();
+
+  // Deduplicate orders to prevent duplicate key errors and inconsistent totals
+  const allOrders = React.useMemo(() => {
+    if (!Array.isArray(inputAllOrders)) return [];
+    const map = new Map<string, Order>();
+    for (const o of inputAllOrders) {
+      if (o && o.id) {
+        if (!map.has(o.id)) {
+          map.set(o.id, o);
+        } else {
+          const existing = map.get(o.id)!;
+          const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+          const incomingTime = new Date(o.updatedAt || o.createdAt || 0).getTime();
+          if (incomingTime >= existingTime) {
+            map.set(o.id, o);
+          }
+        }
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [inputAllOrders]);
   const [failOrderId, setFailOrderId] = useState<string | null>(null);
   const [failReason, setFailReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -563,9 +586,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {incomingAvailableOrders.map((order) => (
+              {incomingAvailableOrders.map((order, idx) => (
                 <div
-                  key={order.id}
+                  key={`${order.id}-${idx}`}
                   className="bg-white rounded-2xl border-2 border-amber-300 p-5 shadow-sm flex flex-col justify-between"
                 >
                   <div>
@@ -640,12 +663,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {myActiveDeliveries.map((order) => {
+            {myActiveDeliveries.map((order, idx) => {
               const navUrl = getNavigationUrl(order.deliveryLat, order.deliveryLng);
 
               return (
                 <div
-                  key={order.id}
+                  key={`${order.id}-${idx}`}
                   className="bg-white rounded-3xl border-2 border-emerald-500 p-5 sm:p-6 shadow-md"
                 >
                   <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 gap-2">
@@ -805,11 +828,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {myDeliveredOrdersFiltered.map((order) => {
+            {myDeliveredOrdersFiltered.map((order, idx) => {
               const split = calculateOrderFinancialSplit(order);
               return (
                 <div
-                  key={order.id}
+                  key={`${order.id}-${idx}`}
                   className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
                 >
                   <div className="space-y-1">

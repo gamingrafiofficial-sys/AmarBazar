@@ -233,12 +233,55 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "userId", "action", "resource", "createdAt"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Registered marketplace customer account with mobile phone identifier",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "address": { "type": "string", "maxLength": 500 },
+        "password": { "type": "string", "maxLength": 128 },
+        "areaId": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "phone", "address", "createdAt"]
+    },
+    "Rider": {
+      "title": "Rider",
+      "description": "Registered delivery rider account with active status and cash ledger balance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "password": { "type": "string", "maxLength": 128 },
+        "vehicleType": { "type": "string", "maxLength": 50 },
+        "currentMarketId": { "type": "string", "maxLength": 64 },
+        "isOnline": { "type": "boolean" },
+        "isDeactivated": { "type": "boolean" },
+        "deactivatedReason": { "type": "string", "maxLength": 300 },
+        "currentBalance": { "type": "number" },
+        "completedDeliveries": { "type": "number" },
+        "pendingDeliveries": { "type": "number" }
+      },
+      "required": ["id", "name", "phone", "vehicleType"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profile documents mapped by Auth UID"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Online customer accounts indexed by phone/id"
+    },
+    "/riders/{riderId}": {
+      "schema": { "$ref": "#/entities/Rider" },
+      "description": "Delivery rider fleet profiles and balances"
     },
     "/markets/{marketId}": {
       "schema": { "$ref": "#/entities/Market" },

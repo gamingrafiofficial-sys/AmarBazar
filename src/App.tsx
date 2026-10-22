@@ -16,6 +16,19 @@ import { OrdersPage } from './pages/OrdersPage';
 import { LoginPage } from './pages/LoginPage';
 import { ProfilePage } from './pages/ProfilePage';
 import {
+  seedFirestoreIfEmpty,
+  subscribeToOrdersOnline,
+  subscribeToRidersOnline,
+  subscribeToProductsOnline,
+  subscribeToMarketsOnline,
+  createOrderOnline,
+  updateOrderOnline,
+  sendMessageOnOrderOnline,
+  toggleRiderActiveOnline,
+  recordRiderHandoverOnline,
+  fetchCustomerByPhoneOnline,
+} from './services/firestoreService';
+import {
   SEED_MARKETS,
   SEED_PRODUCTS,
   SEED_CATEGORIES,
@@ -37,6 +50,29 @@ import { Search, MapPin } from 'lucide-react';
 
 type PageView = 'catalog' | 'product_view' | 'cart' | 'orders' | 'login' | 'profile';
 
+// Helper function to reliably deduplicate orders by ID and sort newest first
+const dedupeOrders = (orderList: Order[]): Order[] => {
+  if (!Array.isArray(orderList)) return [];
+  const map = new Map<string, Order>();
+  for (const o of orderList) {
+    if (o && o.id) {
+      if (!map.has(o.id)) {
+        map.set(o.id, o);
+      } else {
+        const existing = map.get(o.id)!;
+        const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+        const incomingTime = new Date(o.updatedAt || o.createdAt || 0).getTime();
+        if (incomingTime >= existingTime) {
+          map.set(o.id, o);
+        }
+      }
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+};
+
 function MarketplaceMain() {
   const { language } = useLanguage();
   const { role, setRole } = useAuth();
@@ -56,7 +92,7 @@ function MarketplaceMain() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Orders & Riders
-  const [orders, setOrders] = useState<Order[]>(SEED_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(() => dedupeOrders(SEED_ORDERS));
   const [registeredRiders, setRegisteredRiders] = useState<DeliveryRiderAccount[]>(SEED_RIDERS);
   const [activeRider, setActiveRider] = useState<DeliveryRiderAccount | null>(() => {
     try {
@@ -66,41 +102,65 @@ function MarketplaceMain() {
     return null;
   });
 
-  // Page Routing State (Full-page views: Catalog, ProductView, Cart, Orders, Login)
-  const [currentPage, setCurrentPage] = useState<PageView>('catalog');
+  // Page Routing State (Full-page views: Catalog, ProductView, Cart, Orders, Login, Profile)
+  const [currentPage, setCurrentPageState] = useState<PageView>(() => {
+    try {
+      const savedPage = localStorage.getItem('amar_current_page') as PageView;
+      if (savedPage && ['catalog', 'product_view', 'cart', 'orders', 'login', 'profile'].includes(savedPage)) {
+        return savedPage;
+      }
+    } catch {}
+    return 'catalog';
+  });
+
+  const setCurrentPage = (page: PageView) => {
+    setCurrentPageState(page);
+    try {
+      localStorage.setItem('amar_current_page', page);
+    } catch {}
+  };
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // Sync riders and orders from server on initialization
+  // Real-time Firebase Firestore Online Synchronization
   useEffect(() => {
-    const syncWithServer = async () => {
-      try {
-        const ridersRes = await fetch('/api/admin/riders');
-        if (ridersRes.ok) {
-          const rData = await ridersRes.json();
-          if (Array.isArray(rData.riders) && rData.riders.length > 0) {
-            setRegisteredRiders(rData.riders);
-          }
-        }
-      } catch (e) {
-        console.warn('Could not sync riders from server:', e);
-      }
+    // 1. Seed online database if empty
+    seedFirestoreIfEmpty();
 
-      try {
-        const ordersRes = await fetch('/api/orders');
-        if (ordersRes.ok) {
-          const oData = await ordersRes.json();
-          if (Array.isArray(oData.orders) && oData.orders.length > 0) {
-            setOrders(oData.orders);
-          }
-        }
-      } catch (e) {
-        console.warn('Could not sync orders from server:', e);
+    // 2. Real-time live subscriptions from Firestore
+    const unsubOrders = subscribeToOrdersOnline((liveOrders) => {
+      if (liveOrders.length > 0) {
+        setOrders((prev) => dedupeOrders([...liveOrders, ...prev]));
       }
+    });
+
+    const unsubRiders = subscribeToRidersOnline((liveRiders) => {
+      if (liveRiders.length > 0) {
+        setRegisteredRiders(liveRiders);
+      }
+    });
+
+    const unsubProducts = subscribeToProductsOnline((liveProducts) => {
+      if (liveProducts.length > 0) {
+        setProducts(liveProducts);
+      }
+    });
+
+    const unsubMarkets = subscribeToMarketsOnline((liveMarkets) => {
+      if (liveMarkets.length > 0) {
+        setMarkets(liveMarkets);
+      }
+    });
+
+    return () => {
+      unsubOrders();
+      unsubRiders();
+      unsubProducts();
+      unsubMarkets();
     };
-    syncWithServer();
   }, []);
 
-  // Logged-in Customer Profile (Persistent)
+  // Logged-in Customer Profile (Online from Firebase)
   const [loggedInCustomer, setLoggedInCustomer] = useState<CustomerAccount | null>(() => {
     try {
       const saved = localStorage.getItem('amar_active_customer');
@@ -109,6 +169,20 @@ function MarketplaceMain() {
       return null;
     }
   });
+
+  // Keep customer data refreshed directly from Firebase Firestore
+  useEffect(() => {
+    if (loggedInCustomer?.phone) {
+      fetchCustomerByPhoneOnline(loggedInCustomer.phone).then((freshCust) => {
+        if (freshCust) {
+          setLoggedInCustomer(freshCust);
+          try {
+            localStorage.setItem('amar_active_customer', JSON.stringify(freshCust));
+          } catch {}
+        }
+      });
+    }
+  }, [loggedInCustomer?.phone]);
 
   // Area Selection Modal
   const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
@@ -141,6 +215,7 @@ function MarketplaceMain() {
       localStorage.removeItem('amar_auth_role');
       localStorage.removeItem('amar_active_customer');
       localStorage.removeItem('amar_active_rider');
+      localStorage.setItem('amar_current_page', 'catalog');
     } catch {}
     setLoggedInCustomer(null);
     setActiveRider(null);
@@ -149,14 +224,24 @@ function MarketplaceMain() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOrderSuccess = (newOrder: Order) => {
-    setOrders((prev) => [newOrder, ...prev]);
+  const handleOrderSuccess = async (newOrder: Order) => {
+    // Optimistically update orders with deduplication immediately
+    setOrders((prev) => dedupeOrders([newOrder, ...prev]));
     setCurrentPage('orders');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      await createOrderOnline(newOrder);
+    } catch (e) {
+      console.warn('Firestore order write error:', e);
+    }
   };
 
   const handleCancelOrder = async (orderId: string, reason: string) => {
     try {
+      await updateOrderOnline(orderId, {
+        orderStatus: 'cancelled',
+        cancellationReason: reason,
+      });
       await fetch('/api/orders/transition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,6 +266,13 @@ function MarketplaceMain() {
   // Rider Accepts Order
   const handleRiderAcceptOrder = async (orderId: string, rider: DeliveryRiderAccount) => {
     try {
+      await updateOrderOnline(orderId, {
+        riderId: rider.id,
+        riderName: rider.name,
+        riderPhone: rider.phone,
+        acceptedAt: new Date().toISOString(),
+        orderStatus: 'rider_assigned',
+      });
       await fetch('/api/orders/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,6 +305,11 @@ function MarketplaceMain() {
   // State Transition (e.g. picked up, delivered)
   const handleTransitionOrder = async (orderId: string, targetStatus: OrderStatus, reason?: string) => {
     try {
+      await updateOrderOnline(orderId, {
+        orderStatus: targetStatus,
+        paymentStatus: targetStatus === 'delivered' ? 'collected' : undefined,
+        ...(reason ? { failureReason: reason } : {}),
+      });
       await fetch('/api/orders/transition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -243,6 +340,12 @@ function MarketplaceMain() {
   const handleAdminAssignRider = async (orderId: string, riderId: string) => {
     const selectedRider = registeredRiders.find((r) => r.id === riderId);
     try {
+      await updateOrderOnline(orderId, {
+        riderId,
+        riderName: selectedRider?.name,
+        riderPhone: selectedRider?.phone,
+        orderStatus: 'rider_assigned',
+      });
       await fetch('/api/admin/assign-rider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -313,6 +416,7 @@ function MarketplaceMain() {
     );
 
     try {
+      await sendMessageOnOrderOnline(orderId, tempMessage);
       const res = await fetch(`/api/orders/${orderId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -351,6 +455,7 @@ function MarketplaceMain() {
     );
 
     try {
+      await updateOrderOnline(orderId, { notes: newNotes });
       await fetch(`/api/orders/${orderId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -451,6 +556,7 @@ function MarketplaceMain() {
     );
 
     try {
+      await recordRiderHandoverOnline(riderId, amount, notes);
       await fetch('/api/admin/record-handover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -466,7 +572,7 @@ function MarketplaceMain() {
     setRegisteredRiders((prev) =>
       prev.map((r) =>
         r.id === riderId
-          ? { ...r, isActive, deactivatedReason: isActive ? undefined : reason }
+          ? { ...r, isActive, isDeactivated: !isActive, deactivatedReason: isActive ? undefined : reason }
           : r
       )
     );
@@ -475,6 +581,7 @@ function MarketplaceMain() {
       const updated = {
         ...activeRider,
         isActive,
+        isDeactivated: !isActive,
         deactivatedReason: isActive ? undefined : reason,
       };
       setActiveRider(updated);
@@ -484,6 +591,7 @@ function MarketplaceMain() {
     }
 
     try {
+      await toggleRiderActiveOnline(riderId, !isActive, reason);
       await fetch('/api/admin/riders/toggle-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

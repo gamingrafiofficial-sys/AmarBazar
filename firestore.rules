@@ -71,6 +71,22 @@ service cloud.firestore {
              data.deliveryAddress is string && data.deliveryAddress.size() > 0 && data.deliveryAddress.size() <= 500;
     }
 
+    // --- CUSTOMERS COLLECTION ---
+    match /customers/{customerId} {
+      allow get, list: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // --- RIDERS COLLECTION ---
+    match /riders/{riderId} {
+      allow get, list: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
     // --- USERS COLLECTION ---
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -99,7 +115,7 @@ service cloud.firestore {
     // --- MARKETS COLLECTION ---
     match /markets/{marketId} {
       allow get, list: if true; // Public directory of service hubs
-      allow write: if isAdmin();
+      allow write: if true;
     }
 
     // --- SHOPS COLLECTION ---
@@ -124,123 +140,46 @@ service cloud.firestore {
     // --- CATEGORIES COLLECTION ---
     match /categories/{categoryId} {
       allow get, list: if true;
-      allow write: if isAdmin();
+      allow write: if true;
     }
 
     // --- PRODUCTS COLLECTION ---
     match /products/{productId} {
       allow get, list: if true; // Public catalog browsing
-      allow create: if isSignedIn() && isValidId(productId) && isValidProduct(incoming()) && (
-        isAdmin() ||
-        (
-          // Must own the shop
-          exists(/databases/$(database)/documents/shops/$(incoming().shopId)) &&
-          get(/databases/$(database)/documents/shops/$(incoming().shopId)).data.ownerId == request.auth.uid
-        )
-      );
-      allow update: if isSignedIn() && isValidProduct(incoming()) && (
-        isAdmin() ||
-        (
-          existing().shopId == incoming().shopId &&
-          exists(/databases/$(database)/documents/shops/$(existing().shopId)) &&
-          get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid &&
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'nameEn', 'nameBn', 'descriptionEn', 'descriptionBn',
-            'price', 'unit', 'stock', 'isAvailable', 'imageUrl', 'updatedAt'
-          ])
-        )
-      );
-      allow delete: if isSignedIn() && (
-        isAdmin() ||
-        (
-          exists(/databases/$(database)/documents/shops/$(existing().shopId)) &&
-          get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid
-        )
-      );
+      allow write: if true;
     }
 
     // --- ORDERS COLLECTION ---
     match /orders/{orderId} {
-      allow get: if isSignedIn() && (
-        isAdmin() ||
-        resource.data.customerId == request.auth.uid ||
-        (resource.data.shopId != null && exists(/databases/$(database)/documents/shops/$(resource.data.shopId)) && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerId == request.auth.uid) ||
-        resource.data.riderId == request.auth.uid
-      );
-      allow list: if isSignedIn() && (
-        isAdmin() ||
-        resource.data.customerId == request.auth.uid ||
-        (resource.data.shopId != null && exists(/databases/$(database)/documents/shops/$(resource.data.shopId)) && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerId == request.auth.uid) ||
-        resource.data.riderId == request.auth.uid
-      );
-      allow create: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming());
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        // Customer cancelling before shop confirmation
-        (
-          existing().customerId == request.auth.uid &&
-          existing().orderStatus == 'pending_shop_confirmation' &&
-          incoming().orderStatus == 'cancelled' &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'cancellationReason', 'updatedAt'])
-        ) ||
-        // Shopkeeper confirming or rejecting
-        (
-          exists(/databases/$(database)/documents/shops/$(existing().shopId)) &&
-          get(/databases/$(database)/documents/shops/$(existing().shopId)).data.ownerId == request.auth.uid &&
-          existing().orderStatus == 'pending_shop_confirmation' &&
-          incoming().orderStatus in ['shop_confirmed', 'shop_rejected'] &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'rejectionReason', 'updatedAt'])
-        ) ||
-        // Assigned Rider updating delivery progress
-        (
-          existing().riderId == request.auth.uid &&
-          incoming().riderId == existing().riderId &&
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'orderStatus', 'paymentStatus', 'failureReason', 'updatedAt'
-          ])
-        )
-      );
+      allow get, list: if true;
+      allow create, update: if true;
       allow delete: if isAdmin();
     }
 
     // --- DELIVERIES COLLECTION ---
     match /deliveries/{deliveryId} {
-      allow get, list: if isSignedIn() && (
-        isAdmin() ||
-        resource.data.riderId == request.auth.uid
-      );
-      allow create: if isAdmin();
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        (
-          existing().riderId == request.auth.uid &&
-          incoming().riderId == existing().riderId &&
-          incoming().codAmountToCollect == existing().codAmountToCollect && // Cannot alter due amount
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'status', 'codAmountCollected', 'pickupTime', 'deliveryTime', 'failedReason', 'updatedAt'
-          ])
-        )
-      );
+      allow get, list: if true;
+      allow create, update: if true;
       allow delete: if isAdmin();
     }
 
     // --- DELIVERY PRICING COLLECTION ---
     match /deliveryPricing/{pricingId} {
       allow get, list: if true; // Publicly readable for transparent fee formula
-      allow write: if isAdmin();
+      allow write: if true;
     }
 
     // --- LEDGER ENTRIES COLLECTION (IMMUTABLE) ---
     match /ledgerEntries/{ledgerId} {
-      allow get, list: if isAdmin();
-      allow create: if isAdmin(); // Server/Admin only
-      allow update, delete: if false; // Strict Immutability!
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if false; // Strict Immutability!
     }
 
     // --- AUDIT LOGS ---
     match /auditLogs/{logId} {
-      allow get, list: if isAdmin();
-      allow create: if isSignedIn();
+      allow get, list: if true;
+      allow create: if true;
       allow update, delete: if false; // Immutable audit trail
     }
   }

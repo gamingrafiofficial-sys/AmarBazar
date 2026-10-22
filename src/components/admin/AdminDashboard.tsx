@@ -65,7 +65,7 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  orders,
+  orders: inputOrders,
   products,
   markets,
   categories,
@@ -85,6 +85,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onLogout,
 }) => {
   const { language, formatBDT } = useLanguage();
+
+  // Deduplicate orders to prevent duplicate key errors and inconsistent statistics
+  const orders = React.useMemo(() => {
+    if (!Array.isArray(inputOrders)) return [];
+    const map = new Map<string, Order>();
+    for (const o of inputOrders) {
+      if (o && o.id) {
+        if (!map.has(o.id)) {
+          map.set(o.id, o);
+        } else {
+          const existing = map.get(o.id)!;
+          const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+          const incomingTime = new Date(o.updatedAt || o.createdAt || 0).getTime();
+          if (incomingTime >= existingTime) {
+            map.set(o.id, o);
+          }
+        }
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [inputOrders]);
+
   const [activeTab, setActiveTab] = useState<'new_orders' | 'all_orders' | 'rider_balances' | 'products' | 'areas' | 'riders'>('new_orders');
 
   // Search & Filter in all orders
@@ -483,7 +507,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {newOrders.map((order) => {
+              {newOrders.map((order, idx) => {
                 // Filter riders that cover this order's union or thana
                 const matchingRiders = registeredRiders.filter((r) => {
                   if (order.unionId && r.assignedUnionIds?.length > 0) {
@@ -494,7 +518,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 return (
                   <div
-                    key={order.id}
+                    key={`${order.id}-${idx}`}
                     className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between"
                   >
                     <div>
@@ -713,8 +737,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-50">
+                  filteredOrders.map((o, idx) => (
+                    <tr key={`${o.id}-${idx}`} className="hover:bg-slate-50">
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
                         #{o.id}
                       </td>
@@ -2208,9 +2232,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {riderOrders.map((o) => (
+                      {riderOrders.map((o, idx) => (
                         <div
-                          key={o.id}
+                          key={`${o.id}-${idx}`}
                           className="p-3.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50/70 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2"
                         >
                           <div>
