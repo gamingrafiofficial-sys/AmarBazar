@@ -50,6 +50,7 @@ import { normalizePhone, convertBengaliDigits, isValidBangladeshiPhone } from '.
 import { db } from './src/lib/firebase';
 import { db as sqlDb } from './src/db/index.ts';
 import * as sqlSchema from './src/db/schema.ts';
+import { eq } from 'drizzle-orm';
 import { doc, setDoc, getDocs, collection, query, where } from 'firebase/firestore';
 export { normalizePhone };
 
@@ -374,6 +375,70 @@ app.get('/api/orders', (req, res) => {
     return res.json(customerOrders);
   }
   res.json(inMemoryDB.orders);
+});
+
+// Products API (Synchronized with in-memory DB and Cloud SQL PostgreSQL)
+app.get('/api/products', (req, res) => {
+  res.json(inMemoryDB.products);
+});
+
+app.post('/api/products/create', async (req, res) => {
+  try {
+    const prod = req.body;
+    if (!prod || !prod.id) {
+      return res.status(400).json({ error: 'Invalid product data' });
+    }
+    const idx = inMemoryDB.products.findIndex((p) => p.id === prod.id);
+    if (idx !== -1) {
+      inMemoryDB.products[idx] = prod;
+    } else {
+      inMemoryDB.products.unshift(prod);
+    }
+    // Also persist in Cloud SQL (PostgreSQL)
+    try {
+      await sqlDb.insert(sqlSchema.products).values({
+        id: prod.id,
+        marketId: prod.marketId || 'kaliganj',
+        nameEn: prod.nameEn || prod.nameBn,
+        nameBn: prod.nameBn,
+        price: Number(prod.price) || 0,
+        unit: prod.unit || 'kg',
+        stock: Number(prod.stock) || 0,
+        isAvailable: prod.isAvailable !== false,
+        imageUrl: prod.imageUrl || '',
+      }).onConflictDoUpdate({
+        target: sqlSchema.products.id,
+        set: {
+          price: Number(prod.price) || 0,
+          stock: Number(prod.stock) || 0,
+          isAvailable: prod.isAvailable !== false,
+          nameEn: prod.nameEn || prod.nameBn,
+          nameBn: prod.nameBn,
+          imageUrl: prod.imageUrl || '',
+        },
+      });
+    } catch (sqlErr) {
+      console.warn('Cloud SQL product insert (non-blocking):', sqlErr);
+    }
+    res.status(201).json(prod);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save product' });
+  }
+});
+
+app.delete('/api/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    inMemoryDB.products = inMemoryDB.products.filter((p) => p.id !== id);
+    try {
+      await sqlDb.delete(sqlSchema.products).where(eq(sqlSchema.products.id, id));
+    } catch (sqlErr) {
+      console.warn('Cloud SQL product delete (non-blocking):', sqlErr);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete product' });
+  }
 });
 
 // Health & System Info

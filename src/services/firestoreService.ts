@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  deleteDoc,
   updateDoc,
   query,
   where,
@@ -400,13 +401,29 @@ export function subscribeToProductsOnline(
   return onSnapshot(
     collection(db, PRODUCTS_COL),
     (snapshot) => {
-      if (!snapshot.empty) {
-        const prods = snapshot.docs.map((d) => d.data() as Product);
+      const prods = snapshot.docs.map((d) => d.data() as Product);
+      if (prods.length > 0) {
         onProductsUpdated(prods);
       }
     },
     (err) => console.error('Firestore Products listener error:', err)
   );
+}
+
+export async function createProductOnline(product: Product): Promise<void> {
+  try {
+    await setDoc(doc(db, PRODUCTS_COL, product.id), product);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${PRODUCTS_COL}/${product.id}`);
+  }
+}
+
+export async function deleteProductOnline(productId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, PRODUCTS_COL, productId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${PRODUCTS_COL}/${productId}`);
+  }
 }
 
 export function subscribeToMarketsOnline(
@@ -415,11 +432,28 @@ export function subscribeToMarketsOnline(
   return onSnapshot(
     collection(db, MARKETS_COL),
     (snapshot) => {
-      if (!snapshot.empty) {
-        const list = snapshot.docs.map((d) => d.data() as Market);
+      const list = snapshot.docs.map((d) => d.data() as Market);
+      if (list.length > 0) {
         onMarketsUpdated(list);
       }
     },
     (err) => console.error('Firestore Markets listener error:', err)
   );
 }
+
+export async function createMarketOnline(market: Market): Promise<void> {
+  try {
+    await setDoc(doc(db, MARKETS_COL, market.id), market);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${MARKETS_COL}/${market.id}`);
+  }
+}
+
+export async function deleteMarketOnline(marketId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, MARKETS_COL, marketId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${MARKETS_COL}/${marketId}`);
+  }
+}
+

@@ -27,6 +27,10 @@ import {
   toggleRiderActiveOnline,
   recordRiderHandoverOnline,
   fetchCustomerByPhoneOnline,
+  createProductOnline,
+  deleteProductOnline,
+  createMarketOnline,
+  deleteMarketOnline,
 } from './services/firestoreService';
 import {
   SEED_MARKETS,
@@ -467,17 +471,22 @@ function MarketplaceMain() {
   };
 
   // Admin Adds Area
-  const handleAddMarket = (newMarket: Omit<Market, 'id'>) => {
+  const handleAddMarket = async (newMarket: Omit<Market, 'id'>) => {
     const id = newMarket.nameEn.toLowerCase().replace(/[^a-z0-9]/g, '-') || `area-${Date.now()}`;
     const market: Market = {
       ...newMarket,
       id,
     };
-    setMarkets((prev) => [...prev, market]);
+    setMarkets((prev) => [...prev.filter((m) => m.id !== market.id), market]);
+    try {
+      await createMarketOnline(market);
+    } catch (err) {
+      console.warn('Error saving market to Firestore:', err);
+    }
   };
 
   // Admin Deletes Area
-  const handleDeleteMarket = (marketId: string) => {
+  const handleDeleteMarket = async (marketId: string) => {
     setMarkets((prev) => {
       const next = prev.filter((m) => m.id !== marketId);
       if (selectedAreaId === marketId && next.length > 0) {
@@ -485,6 +494,11 @@ function MarketplaceMain() {
       }
       return next;
     });
+    try {
+      await deleteMarketOnline(marketId);
+    } catch (err) {
+      console.warn('Error deleting market from Firestore:', err);
+    }
   };
 
   // Admin Registers New Delivery Rider
@@ -603,19 +617,55 @@ function MarketplaceMain() {
   };
 
   // Admin Adds New Product
-  const handleAddProduct = (newProdData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleAddProduct = async (newProdData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     const p: Product = {
       ...newProdData,
       id: `prod-${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setProducts((prev) => [p, ...prev]);
+    // Optimistic UI update
+    setProducts((prev) => [p, ...prev.filter((prod) => prod.id !== p.id)]);
+
+    // Persist to Firebase Firestore
+    try {
+      await createProductOnline(p);
+    } catch (err) {
+      console.warn('Error saving product to Firestore:', err);
+    }
+
+    // Persist to backend server and Cloud SQL
+    try {
+      await fetch('/api/products/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+      });
+    } catch (err) {
+      console.warn('Error syncing product to server:', err);
+    }
   };
 
   // Admin Deletes Product
-  const handleDeleteProduct = (prodId: string) => {
+  const handleDeleteProduct = async (prodId: string) => {
+    // Optimistic UI update
     setProducts((prev) => prev.filter((p) => p.id !== prodId));
+
+    // Persist deletion to Firebase Firestore
+    try {
+      await deleteProductOnline(prodId);
+    } catch (err) {
+      console.warn('Error deleting product from Firestore:', err);
+    }
+
+    // Persist deletion to backend server and Cloud SQL
+    try {
+      await fetch(`/api/products/${prodId}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.warn('Error deleting product from server:', err);
+    }
   };
 
   // Open Product View Page
