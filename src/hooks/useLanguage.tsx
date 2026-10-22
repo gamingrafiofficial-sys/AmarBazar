@@ -13,8 +13,17 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('amarbazaar_lang') as Language;
-    return saved === 'en' ? 'en' : 'bn'; // Default to Bengali-first
+    // Default to English as explicitly requested
+    return saved === 'bn' ? 'bn' : 'en';
   });
+
+  // Ensure default is English on startup if not explicitly set
+  useEffect(() => {
+    const saved = localStorage.getItem('amarbazaar_lang');
+    if (!saved) {
+      localStorage.setItem('amarbazaar_lang', 'en');
+    }
+  }, []);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
