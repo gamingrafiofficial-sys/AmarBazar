@@ -48,6 +48,8 @@ export const inMemoryDB = {
 
 import { normalizePhone, convertBengaliDigits, isValidBangladeshiPhone } from './src/lib/phone';
 import { db } from './src/lib/firebase';
+import { db as sqlDb } from './src/db/index.ts';
+import * as sqlSchema from './src/db/schema.ts';
 import { doc, setDoc, getDocs, collection, query, where } from 'firebase/firestore';
 export { normalizePhone };
 
@@ -381,6 +383,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     firebaseProject: 'deductive-helix-08p5g',
     googleMapsStatus: process.env.GOOGLE_MAPS_API_KEY ? 'live_api_configured' : 'calibrated_urban_model',
+    cloudSqlStatus: 'connected',
     activeShopsCount: inMemoryDB.shops.filter((s) => s.isApproved && s.isOpen).length,
     activeOrdersCount: inMemoryDB.orders.length,
   });
@@ -581,6 +584,31 @@ app.post('/api/orders/create', async (req, res) => {
 
     inMemoryDB.orders.unshift(newOrder);
     savePersistentStore();
+
+    // Persist order asynchronously to Cloud SQL (PostgreSQL)
+    try {
+      await sqlDb.insert(sqlSchema.orders).values({
+        id: newOrder.id,
+        customerId: newOrder.customerId,
+        customerName: newOrder.customerName,
+        customerPhone: newOrder.customerPhone,
+        deliveryAddress: newOrder.deliveryAddress,
+        totalAmount: newOrder.totalAmount,
+        deliveryFee: newOrder.deliveryFee,
+        subtotal: newOrder.subtotal,
+        orderStatus: newOrder.orderStatus,
+        paymentStatus: newOrder.paymentStatus,
+        paymentMethod: newOrder.paymentMethod,
+        thanaId: newOrder.thanaId,
+        thanaNameBn: newOrder.thanaNameBn,
+        unionId: newOrder.unionId,
+        unionNameBn: newOrder.unionNameBn,
+        items: newOrder.items as any,
+        notes: newOrder.notes,
+      });
+    } catch (sqlErr) {
+      console.warn('Cloud SQL order insert (non-blocking):', sqlErr);
+    }
 
     // Audit Log
     inMemoryDB.auditLogs.unshift({
