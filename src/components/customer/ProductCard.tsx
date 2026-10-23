@@ -20,11 +20,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelectProdu
   const unitLabelsBn: Record<string, string> = {
     kg: 'কেজি',
     gm: 'গ্রাম',
+    liter: 'লিটার',
     litre: 'লিটার',
     ml: 'মি.লি',
     piece: 'পিস',
     dozen: 'ডজন',
     pack: 'প্যাক',
+    bottle: 'বোতল',
+    cylinder: 'সিলিন্ডার',
     bundle: 'আটি',
   };
 

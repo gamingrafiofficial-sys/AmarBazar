@@ -51,7 +51,7 @@ import {
   UnionArea,
   OrderMessage,
 } from './types';
-import { Search, MapPin } from 'lucide-react';
+import { Search, MapPin, ArrowRight, ArrowLeft, ShoppingBag, Sparkles, Flame, X } from 'lucide-react';
 
 type PageView = 'catalog' | 'product_view' | 'cart' | 'orders' | 'login' | 'profile';
 
@@ -808,37 +808,247 @@ function MarketplaceMain() {
                     </div>
                   </div>
 
-                  {/* Section Title */}
-                  <div className="flex items-center justify-between px-1">
-                    <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-emerald-700" />
-                      <span>
-                        {language === 'bn'
-                          ? `${currentArea?.nameBn} এরিয়ার প্রোডাক্টসমূহ`
-                          : `Products in ${currentArea?.nameEn || 'Current Area'}`}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-normal">
-                        ({filteredProducts.length})
-                      </span>
-                    </h2>
-                  </div>
+                  {/* 2.3.1 SEARCH RESULTS VIEW (When searching) */}
+                  {searchQuery.trim().length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          <Search className="w-4 h-4 text-emerald-700" />
+                          <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                            {language === 'bn'
+                              ? `অনুসন্ধানের ফলাফল: "${searchQuery}"`
+                              : `Search Results for "${searchQuery}"`}
+                          </h2>
+                          <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                            {filteredProducts.length} {language === 'bn' ? 'টি পণ্য' : 'items'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 font-bold bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>{language === 'bn' ? 'মুছে ফেলুন' : 'Clear'}</span>
+                        </button>
+                      </div>
 
-                  {/* Products Grid - Clicking any opens Product View Page */}
-                  {filteredProducts.length === 0 ? (
-                    <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-400 text-xs">
-                      {language === 'bn'
-                        ? 'এই এরিয়া বা ক্যাটাগরিতে কোনো পণ্য পাওয়া যায়নি। এডমিন ড্যাশবোর্ড থেকে নতুন পণ্য যুক্ত করা যাবে।'
-                        : 'No products found in this area or category. New products can be added from the Admin Dashboard.'}
+                      {filteredProducts.length === 0 ? (
+                        <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-400 text-xs">
+                          {language === 'bn'
+                            ? `"${searchQuery}" নামে কোনো পণ্য পাওয়া যায়নি। অন্য নামে খুঁজে দেখুন।`
+                            : `No products matching "${searchQuery}". Please try another keyword.`}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4">
+                          {filteredProducts.map((product) => (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              onSelectProduct={handleOpenProductView}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
-                      {filteredProducts.map((product) => (
-                        <ProductCard
-                          key={product.id}
-                          product={product}
-                          onSelectProduct={handleOpenProductView}
-                        />
-                      ))}
+                  )}
+
+                  {/* 2.3.2 SINGLE CATEGORY VIEW (When customer clicks "View All" on any category or selects a category tab) */}
+                  {!searchQuery.trim() && selectedCategory !== 'all' && (
+                    <div className="space-y-4">
+                      {/* Back button and Category Details Header */}
+                      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCategory('all');
+                              window.scrollTo({ top: 300, behavior: 'smooth' });
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl border border-slate-200 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                            title="Back to All Categories"
+                          >
+                            <ArrowLeft className="w-4 h-4 text-emerald-700" />
+                            <span>{language === 'bn' ? 'সকল ক্যাটাগরিতে ফিরে যান' : 'Back to Categories'}</span>
+                          </button>
+
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base sm:text-lg font-black text-slate-900">
+                                {selectedCategory === 'daily_products'
+                                  ? 'Daily Products'
+                                  : selectedCategory === 'personal_care'
+                                  ? 'Personal Care'
+                                  : selectedCategory === 'fuel_energy'
+                                  ? 'Fuel & Energy'
+                                  : selectedCategory}
+                              </h2>
+                              <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">
+                                {filteredProducts.length} {language === 'bn' ? 'টি পণ্য' : 'products'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {selectedCategory === 'daily_products'
+                                ? 'চাল, ডাল, তেল, চিনি, বিস্কুট, আটা ও প্রতিদিনের মুদি বাজার সামগ্রী'
+                                : selectedCategory === 'personal_care'
+                                ? 'সাবান, শ্যাম্পু, টুথপেস্ট ও প্রসাধন সামগ্রী'
+                                : selectedCategory === 'fuel_energy'
+                                ? '১২ কেজি এলপিজি গ্যাস সিলিন্ডার ও জ্বালানি'
+                                : 'এই ক্যাটাগরির সকল পণ্য'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto">
+                          📍 {currentArea?.nameBn || currentArea?.nameEn}
+                        </span>
+                      </div>
+
+                      {/* Complete Products Grid for this category */}
+                      {filteredProducts.length === 0 ? (
+                        <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-400 text-xs">
+                          {language === 'bn'
+                            ? 'এই ক্যাটাগরিতে কোনো পণ্য পাওয়া যায়নি।'
+                            : 'No products found in this category.'}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4">
+                          {filteredProducts.map((product) => (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              onSelectProduct={handleOpenProductView}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2.3.3 HOME DEFAULT: 3 SEPARATE CATEGORY SECTIONS (Showing 6 products each with "View All" action) */}
+                  {!searchQuery.trim() && selectedCategory === 'all' && (
+                    <div className="space-y-6">
+                      {[
+                        {
+                          id: 'daily_products',
+                          name: 'Daily Products',
+                          subtitleBn: 'চাল, ডাল, সয়াবিন তেল, চিনি, আটা ও চা বিস্কুট',
+                          subtitleEn: 'Rice, lentils, cooking oil, flour & daily groceries',
+                          icon: ShoppingBag,
+                          color: 'bg-emerald-100 text-emerald-800',
+                          badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                        },
+                        {
+                          id: 'personal_care',
+                          name: 'Personal Care',
+                          subtitleBn: 'সাবান, শ্যাম্পু, টুথপেস্ট ও ব্যক্তিগত যত্ন সামগ্রী',
+                          subtitleEn: 'Soaps, shampoos, toothpastes & hygiene products',
+                          icon: Sparkles,
+                          color: 'bg-purple-100 text-purple-800',
+                          badge: 'bg-purple-50 text-purple-800 border-purple-200',
+                        },
+                        {
+                          id: 'fuel_energy',
+                          name: 'Fuel & Energy',
+                          subtitleBn: '১২ কেজি এলপিজি গ্যাস সিলিন্ডার (বসুন্ধরা, ওমেরা, যমুনা ইত্যাদি)',
+                          subtitleEn: '12KG LPG gas cylinders with fast door-to-door delivery',
+                          icon: Flame,
+                          color: 'bg-amber-100 text-amber-900',
+                          badge: 'bg-amber-50 text-amber-900 border-amber-200',
+                        },
+                      ].map((catSection) => {
+                        const catProducts = areaProducts.filter(
+                          (p) => p.categoryId === catSection.id && !p.isPrivate
+                        );
+                        // Show top 6 products on Home
+                        const previewProducts = catProducts.slice(0, 6);
+
+                        return (
+                          <section
+                            key={catSection.id}
+                            className="bg-white rounded-3xl border border-slate-200/90 p-3.5 sm:p-5 shadow-xs space-y-3.5"
+                          >
+                            {/* Section Header */}
+                            <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                              <div className="flex items-center gap-2.5">
+                                <div
+                                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center font-bold shrink-0 ${catSection.color}`}
+                                >
+                                  <catSection.icon className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                                      {catSection.name}
+                                    </h3>
+                                    <span
+                                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${catSection.badge}`}
+                                    >
+                                      {catProducts.length} {language === 'bn' ? 'টি পণ্য' : 'items'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 hidden sm:block">
+                                    {language === 'bn' ? catSection.subtitleBn : catSection.subtitleEn}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* "View All" Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCategory(catSection.id);
+                                  window.scrollTo({ top: 320, behavior: 'smooth' });
+                                }}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-emerald-200 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                              >
+                                <span>{language === 'bn' ? 'সবগুলো দেখুন' : 'View All'}</span>
+                                <ArrowRight className="w-3.5 h-3.5 text-emerald-700" />
+                              </button>
+                            </div>
+
+                            {/* Products Grid (6 Items) */}
+                            {previewProducts.length === 0 ? (
+                              <div className="py-6 text-center text-slate-400 text-xs">
+                                {language === 'bn'
+                                  ? 'এই ক্যাটাগরিতে পণ্য পাওয়া যায়নি।'
+                                  : 'No products in this category.'}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4">
+                                {previewProducts.map((product) => (
+                                  <ProductCard
+                                    key={product.id}
+                                    product={product}
+                                    onSelectProduct={handleOpenProductView}
+                                  />
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Bottom "View all N products" button if there are more than 6 products */}
+                            {catProducts.length > 6 && (
+                              <div className="pt-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCategory(catSection.id);
+                                    window.scrollTo({ top: 320, behavior: 'smooth' });
+                                  }}
+                                  className="w-full sm:w-auto text-xs font-bold text-slate-700 hover:text-emerald-800 bg-slate-50 hover:bg-emerald-50 py-2 px-4 rounded-xl border border-slate-200 hover:border-emerald-200 transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <span>
+                                    {language === 'bn'
+                                      ? `${catSection.name} এর বাকি ${catProducts.length - 6}টি সহ মোট ${catProducts.length}টি পণ্য দেখুন`
+                                      : `View all ${catProducts.length} products in ${catSection.name}`}
+                                  </span>
+                                  <ArrowRight className="w-3.5 h-3.5 text-emerald-700" />
+                                </button>
+                              </div>
+                            )}
+                          </section>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
