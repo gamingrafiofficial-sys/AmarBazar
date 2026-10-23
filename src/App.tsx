@@ -28,6 +28,7 @@ import {
   recordRiderHandoverOnline,
   fetchCustomerByPhoneOnline,
   createProductOnline,
+  updateProductOnline,
   deleteProductOnline,
   createMarketOnline,
   deleteMarketOnline,
@@ -199,12 +200,21 @@ function MarketplaceMain() {
       ? `${currentArea.nameBn} • ${selectedUnionObj.nameBn}`
       : currentArea.nameBn;
 
-  // Filtered Products for selected Area
+  // Filtered Products for selected Area (Supports specific market or 'all' / 'সকল এরিয়া')
   const areaProducts = products.filter(
-    (p) => !p.marketId || p.marketId === selectedAreaId || p.marketId === 'all'
+    (p) =>
+      !p.marketId ||
+      p.marketId === selectedAreaId ||
+      p.marketId === 'all' ||
+      p.area === 'সকল এরিয়া' ||
+      p.area === 'All Areas'
   );
 
   const filteredProducts = areaProducts.filter((p) => {
+    // Hide private products from regular customers and riders
+    if (role !== 'admin' && p.isPrivate) {
+      return false;
+    }
     const matchCategory = selectedCategory === 'all' || p.categoryId === selectedCategory;
     const matchSearch =
       p.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -668,6 +678,41 @@ function MarketplaceMain() {
     }
   };
 
+  // Admin Updates Product (Edit fields such as price, stock, name, category, etc.)
+  const handleUpdateProduct = async (prodId: string, updates: Partial<Product>) => {
+    // Optimistic UI update
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, ...updates, updatedAt: new Date().toISOString() }
+          : p
+      )
+    );
+
+    // Persist updates to Firebase Firestore
+    try {
+      await updateProductOnline(prodId, updates);
+    } catch (err) {
+      console.warn('Error updating product in Firestore:', err);
+    }
+
+    // Persist updates to backend server and Cloud SQL
+    try {
+      await fetch(`/api/products/${prodId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.warn('Error syncing product update to server:', err);
+    }
+  };
+
+  // Admin Toggles Product Private Visibility
+  const handleToggleProductPrivate = async (prodId: string, isPrivate: boolean) => {
+    await handleUpdateProduct(prodId, { isPrivate });
+  };
+
   // Open Product View Page
   const handleOpenProductView = (product: Product) => {
     setSelectedProduct(product);
@@ -767,7 +812,11 @@ function MarketplaceMain() {
                   <div className="flex items-center justify-between px-1">
                     <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5">
                       <MapPin className="w-4 h-4 text-emerald-700" />
-                      <span>{language === 'bn' ? currentArea?.nameBn : currentArea?.nameEn} এরিয়ার প্রোডাক্টসমূহ</span>
+                      <span>
+                        {language === 'bn'
+                          ? `${currentArea?.nameBn} এরিয়ার প্রোডাক্টসমূহ`
+                          : `Products in ${currentArea?.nameEn || 'Current Area'}`}
+                      </span>
                       <span className="text-[11px] text-slate-400 font-normal">
                         ({filteredProducts.length})
                       </span>
@@ -777,7 +826,9 @@ function MarketplaceMain() {
                   {/* Products Grid - Clicking any opens Product View Page */}
                   {filteredProducts.length === 0 ? (
                     <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-400 text-xs">
-                      এই এরিয়া বা ক্যাটাগরিতে কোনো পণ্য পাওয়া যায়নি। এডমিন ড্যাশবোর্ড থেকে নতুন পণ্য যুক্ত করা যাবে।
+                      {language === 'bn'
+                        ? 'এই এরিয়া বা ক্যাটাগরিতে কোনো পণ্য পাওয়া যায়নি। এডমিন ড্যাশবোর্ড থেকে নতুন পণ্য যুক্ত করা যাবে।'
+                        : 'No products found in this area or category. New products can be added from the Admin Dashboard.'}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
@@ -985,6 +1036,8 @@ function MarketplaceMain() {
             registeredRiders={registeredRiders}
             unions={unions}
             onAddProduct={handleAddProduct}
+            onUpdateProduct={handleUpdateProduct}
+            onToggleProductPrivate={handleToggleProductPrivate}
             onDeleteProduct={handleDeleteProduct}
             onAddMarket={handleAddMarket}
             onDeleteMarket={handleDeleteMarket}

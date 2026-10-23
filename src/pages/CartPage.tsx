@@ -228,7 +228,11 @@ export const CartPage: React.FC<CartPageProps> = ({
               {language === 'bn' ? 'আমার কার্ট ও চেকআউট' : 'My Shopping Cart'}
             </h1>
             <p className="text-xs text-slate-500">
-              এরিয়া: <strong className="text-slate-800">{currentArea.nameBn}</strong> ({currentArea.cityBn})
+              {language === 'bn' ? 'এরিয়া:' : 'Area:'}{' '}
+              <strong className="text-slate-800">
+                {language === 'bn' ? currentArea.nameBn : currentArea.nameEn}
+              </strong>{' '}
+              ({language === 'bn' ? currentArea.cityBn : currentArea.cityEn})
             </p>
           </div>
         </div>
@@ -280,7 +284,7 @@ export const CartPage: React.FC<CartPageProps> = ({
               <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
                 <span>{language === 'bn' ? 'কার্টের পণ্য তালিকা' : 'Cart Items'}</span>
                 <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                  {items.length} আইটেম
+                  {items.length} {language === 'bn' ? 'আইটেম' : 'Items'}
                 </span>
               </h2>
 
@@ -359,7 +363,7 @@ export const CartPage: React.FC<CartPageProps> = ({
               {!customerProfile && (
                 <span className="text-[11px] font-bold text-amber-700 bg-amber-100/80 px-2.5 py-1 rounded-full flex items-center gap-1">
                   <Lock className="w-3 h-3" />
-                  <span>লগইন আবশ্যক</span>
+                  <span>{language === 'bn' ? 'লগইন আবশ্যক' : 'Login Required'}</span>
                 </span>
               )}
             </h2>
@@ -373,10 +377,12 @@ export const CartPage: React.FC<CartPageProps> = ({
                   </div>
                   <div className="flex-1">
                     <h3 className="font-extrabold text-xs sm:text-sm text-amber-950">
-                      লগইন না করে অর্ডার করা যাবে না
+                      {language === 'bn' ? 'লগইন না করে অর্ডার করা যাবে না' : 'Login Required to Place Order'}
                     </h3>
                     <p className="text-[11px] text-amber-850 mt-0.5 leading-relaxed">
-                      নিরাপদ ডেলিভারি ও অর্ডার ট্র্যাকিংয়ের জন্য আপনার একাউন্টে লগইন করুন অথবা ২ মিনিটে নতুন একাউন্ট খুলুন।
+                      {language === 'bn'
+                        ? 'নিরাপদ ডেলিভারি ও অর্ডার ট্র্যাকিংয়ের জন্য আপনার একাউন্টে লগইন করুন অথবা ২ মিনিটে নতুন একাউন্ট খুলুন।'
+                        : 'Please log in to your account or register in 2 minutes for secure delivery and live order tracking.'}
                     </p>
                     <button
                       type="button"
@@ -384,7 +390,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                       className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
                     >
                       <LogIn className="w-3.5 h-3.5" />
-                      <span>লগইন বা রেজিস্ট্রেশন করুন</span>
+                      <span>{language === 'bn' ? 'লগইন বা রেজিস্ট্রেশন করুন' : 'Login or Register'}</span>
                     </button>
                   </div>
                 </div>
@@ -443,7 +449,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                   >
                     {markets.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.nameBn} ({m.cityBn})
+                        {language === 'bn' ? m.nameBn : m.nameEn} ({language === 'bn' ? m.cityBn : m.cityEn})
                       </option>
                     ))}
                   </select>
@@ -461,7 +467,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                   >
                     {availableUnions.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.nameBn}
+                        {language === 'bn' ? u.nameBn : u.nameEn}
                       </option>
                     ))}
                   </select>
@@ -476,7 +482,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <textarea
                   rows={2}
                   required
-                  placeholder={language === 'bn' ? 'যেমন: বাসা/দোকান নম্বর, রোড, এলাকা (কালীগঞ্জ / কাপাসিয়া)' : 'House, Road, Area'}
+                  placeholder={language === 'bn' ? 'যেমন: বাসা/দোকান নম্বর, রোড, এলাকা (কালীগঞ্জ / কাপাসিয়া)' : 'House/Shop #, Road, Area'}
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
@@ -491,7 +497,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                     <span>{language === 'bn' ? 'অর্ডারের নিচে বিশেষ নোট (Order Note)' : 'Order Note (Optional)'}</span>
                   </span>
                   <span className="text-[10px] text-amber-800 font-semibold bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300/50">
-                    ঐচ্ছিক
+                    {language === 'bn' ? 'ঐচ্ছিক' : 'Optional'}
                   </span>
                 </label>
                 <textarea
@@ -506,8 +512,13 @@ export const CartPage: React.FC<CartPageProps> = ({
                   className="w-full p-2.5 rounded-xl border border-amber-300 bg-white text-xs text-slate-900 focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 shadow-2xs"
                 />
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[10px] font-bold text-amber-900">ক্লিক করে নোট যোগ করুন:</span>
-                  {['ফোন দিয়ে আসবেন', 'গেটে এসে কল দিন', 'ভাঙতি টাকা আনবেন', 'পণ্য সাবধানে আনবেন'].map((preset) => (
+                  <span className="text-[10px] font-bold text-amber-900">
+                    {language === 'bn' ? 'ক্লিক করে নোট যোগ করুন:' : 'Quick Presets:'}
+                  </span>
+                  {(language === 'bn'
+                    ? ['ফোন দিয়ে আসবেন', 'গেটে এসে কল দিন', 'ভাঙতি টাকা আনবেন', 'পণ্য সাবধানে আনবেন']
+                    : ['Call upon arrival', 'Call outside gate', 'Bring exact change', 'Handle with care']
+                  ).map((preset) => (
                     <button
                       key={preset}
                       type="button"
@@ -525,40 +536,50 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <div className="flex justify-between items-center text-xs">
                   <span className="flex items-center gap-1">
                     <Truck className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>আনুমানিক সড়ক দূরত্ব:</span>
+                    <span>{language === 'bn' ? 'আনুমানিক সড়ক দূরত্ব:' : 'Estimated Road Distance:'}</span>
                   </span>
-                  <span className="font-bold text-slate-800">{roadDistanceKm} কি.মি</span>
+                  <span className="font-bold text-slate-800">
+                    {roadDistanceKm} {language === 'bn' ? 'কি.মি' : 'km'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>আনুমানিক ডেলিভারি সময়:</span>
+                    <span>{language === 'bn' ? 'আনুমানিক ডেলিভারি সময়:' : 'Estimated Delivery Time:'}</span>
                   </span>
-                  <span className="font-semibold text-slate-800">~৩০-৪০ মিনিট</span>
+                  <span className="font-semibold text-slate-800">
+                    {language === 'bn' ? '~৩০-৪০ মিনিট' : '~30-40 mins'}
+                  </span>
                 </div>
                 <p className="text-[10px] text-emerald-800 font-medium pt-1">
-                  💡 বেস ফি ১ম কি.মি ৳৩০ + পরবর্তী প্রতি কি.মি বা অংশে ৳১০।
+                  {language === 'bn'
+                    ? '💡 বেস ফি ১ম কি.মি ৳৩০ + পরবর্তী প্রতি কি.মি বা অংশে ৳১০।'
+                    : '💡 Base fee ৳30 for first 1 km + ৳10 per additional km.'}
                 </p>
               </div>
 
               {/* Payment Method Badge */}
               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center space-x-2 text-amber-900 font-bold text-xs">
                 <Banknote className="w-4 h-4 text-amber-700 shrink-0" />
-                <span>ক্যাশ অন ডেলিভারি (পণ্য পেয়ে নগদ টাকা দিন)</span>
+                <span>
+                  {language === 'bn'
+                    ? 'ক্যাশ অন ডেলিভারি (পণ্য পেয়ে নগদ টাকা দিন)'
+                    : 'Cash on Delivery (Pay cash upon delivery)'}
+                </span>
               </div>
 
               {/* Price Calculation */}
               <div className="pt-2 border-t border-slate-100 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-600">
-                  <span>পণ্যের মূল্য (Subtotal):</span>
+                  <span>{language === 'bn' ? 'পণ্যের মূল্য (Subtotal):' : 'Items Subtotal:'}</span>
                   <span className="font-semibold">{formatBDT(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>ডেলিভারি চার্জ:</span>
+                  <span>{language === 'bn' ? 'ডেলিভারি চার্জ:' : 'Delivery Fee:'}</span>
                   <span className="font-semibold text-emerald-800">{formatBDT(deliveryFee)}</span>
                 </div>
                 <div className="flex justify-between text-sm sm:text-base font-extrabold text-slate-900 border-t border-slate-200 pt-2">
-                  <span>সর্বমোট প্রদেয়:</span>
+                  <span>{language === 'bn' ? 'সর্বমোট প্রদেয়:' : 'Total Amount Payable:'}</span>
                   <span className="text-emerald-800 font-black">{formatBDT(totalAmount)}</span>
                 </div>
               </div>
@@ -571,7 +592,11 @@ export const CartPage: React.FC<CartPageProps> = ({
                   className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition-all shadow-md shadow-amber-600/25 flex items-center justify-center space-x-2 mt-4 active:scale-98"
                 >
                   <Lock className="w-4 h-4" />
-                  <span>🔒 অর্ডার সম্পন্ন করতে প্রথমে লগইন করুন</span>
+                  <span>
+                    {language === 'bn'
+                      ? '🔒 অর্ডার সম্পন্ন করতে প্রথমে লগইন করুন'
+                      : '🔒 Please Log In to Place Order'}
+                  </span>
                 </button>
               ) : (
                 <button
@@ -588,27 +613,33 @@ export const CartPage: React.FC<CartPageProps> = ({
                   {submitPhase === 'loading' && (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-white" />
-                      <span>অর্ডার প্রসেস হচ্ছে...</span>
+                      <span>{language === 'bn' ? 'অর্ডার প্রসেস হচ্ছে...' : 'Processing order...'}</span>
                     </>
                   )}
                   {submitPhase === 'submitted' && (
                     <>
                       <CheckCircle2 className="w-5 h-5 text-white animate-bounce" />
                       <span className="font-extrabold text-sm tracking-wide">
-                        ✅ Submitted! (অর্ডার নিশ্চিত হয়েছে)
+                        {language === 'bn'
+                          ? '✅ Submitted! (অর্ডার নিশ্চিত হয়েছে)'
+                          : '✅ Order Placed Successfully!'}
                       </span>
                     </>
                   )}
                   {submitPhase === 'failed' && (
                     <>
                       <AlertCircle className="w-4 h-4 text-white" />
-                      <span>অর্ডার ব্যর্থ হয়েছে</span>
+                      <span>{language === 'bn' ? 'অর্ডার ব্যর্থ হয়েছে' : 'Order placement failed. Try again.'}</span>
                     </>
                   )}
                   {submitPhase === 'idle' && (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      <span>অর্ডার নিশ্চিত করুন ({formatBDT(totalAmount)})</span>
+                      <span>
+                        {language === 'bn'
+                          ? `অর্ডার নিশ্চিত করুন (${formatBDT(totalAmount)})`
+                          : `Confirm Order (${formatBDT(totalAmount)})`}
+                      </span>
                     </>
                   )}
                 </button>

@@ -127,18 +127,20 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const getDateFilterLabel = (filter: RiderDateFilter) => {
     switch (filter) {
       case 'today':
-        return 'আজকের';
+        return language === 'bn' ? 'আজকের' : "Today's";
       case 'yesterday':
-        return 'গতকালের';
+        return language === 'bn' ? 'গতকালের' : "Yesterday's";
       case 'this_week':
-        return 'গত ৭ দিনের';
+        return language === 'bn' ? 'গত ৭ দিনের' : 'Past 7 Days';
       case 'this_month':
-        return 'এই মাসের';
+        return language === 'bn' ? 'এই মাসের' : 'This Month';
       case 'custom':
-        return customDate ? `তারিখ: ${customDate}` : 'নির্দিষ্ট তারিখ';
+        return customDate
+          ? (language === 'bn' ? `তারিখ: ${customDate}` : `Date: ${customDate}`)
+          : (language === 'bn' ? 'নির্দিষ্ট তারিখ' : 'Selected Date');
       case 'all':
       default:
-        return 'সর্বমোট';
+        return language === 'bn' ? 'সর্বমোট' : 'All Time';
     }
   };
 
@@ -302,7 +304,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         {/* Online / Offline Toggle & Logout */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center space-x-2 bg-slate-50 p-2 sm:p-2.5 rounded-2xl border border-slate-200">
-            <span className="text-xs font-semibold text-slate-700 hidden sm:inline">ডিউটি স্ট্যাটাস:</span>
+            <span className="text-xs font-semibold text-slate-700 hidden sm:inline">
+              {language === 'bn' ? 'ডিউটি স্ট্যাটাস:' : 'Duty Status:'}
+            </span>
             <button
               onClick={() => onToggleOnline(!rider.isOnline)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 ${
@@ -312,7 +316,11 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${rider.isOnline ? 'bg-amber-300 animate-ping' : 'bg-slate-200'}`}></span>
-              <span>{rider.isOnline ? 'অনলাইন (সক্রিয়)' : 'অফলাইন'}</span>
+              <span>
+                {rider.isOnline
+                  ? (language === 'bn' ? 'অনলাইন (সক্রিয়)' : 'Online (Active)')
+                  : (language === 'bn' ? 'অফলাইন' : 'Offline')}
+              </span>
             </button>
           </div>
 
@@ -321,16 +329,16 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               type="button"
               onClick={onLogout}
               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3 py-2.5 rounded-2xl flex items-center gap-1.5 transition-colors shadow-2xs"
-              title="রাইডার অ্যাকাউন্ট লগআউট করুন"
+              title={language === 'bn' ? 'রাইডার অ্যাকাউন্ট লগআউট করুন' : 'Log out rider account'}
             >
               <LogOut className="w-3.5 h-3.5 text-rose-600" />
-              <span>লগআউট</span>
+              <span>{language === 'bn' ? 'লগআউট' : 'Logout'}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* DEACTIVATION WARNING BANNER (যদি এডমিন ব্যালেন্স জমা নেওয়ার জন্য সাময়িক ডিঅ্যাক্টিভ করে থাকে) */}
+      {/* DEACTIVATION WARNING BANNER */}
       {rider.isActive === false && (
         <div className="bg-rose-50 border-2 border-rose-300 rounded-3xl p-5 mb-6 text-rose-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
           <div className="flex items-start gap-3.5">
@@ -340,17 +348,22 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-extrabold text-sm sm:text-base text-rose-900">
-                  আপনার রাইডার অ্যাকাউন্টটি সাময়িকভাবে ডিঅ্যাক্টিভ (স্থগিত) করা হয়েছে
+                  {language === 'bn'
+                    ? 'আপনার রাইডার অ্যাকাউন্টটি সাময়িকভাবে ডিঅ্যাক্টিভ (স্থগিত) করা হয়েছে'
+                    : 'Your rider account is temporarily suspended (inactive)'}
                 </h3>
                 <span className="bg-rose-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                  ডিঅ্যাক্টিভ
+                  {language === 'bn' ? 'ডিঅ্যাক্টিভ' : 'Inactive'}
                 </span>
               </div>
               <p className="text-xs text-rose-800 mt-1 font-medium">
-                <strong>কারণ:</strong> {rider.deactivatedReason || 'ব্যালেন্স অফিসে জমা করার জন্য সামরিক ডিঅ্যাক্টিভ'}
+                <strong>{language === 'bn' ? 'কারণ: ' : 'Reason: '}</strong>
+                {rider.deactivatedReason || (language === 'bn' ? 'ব্যালেন্স অফিসে জমা করার জন্য সাময়িক ডিঅ্যাক্টিভ' : 'Account deactivated for cash settlement')}
               </p>
               <p className="text-[11px] text-rose-700 mt-0.5">
-                হাতে থাকা বকেয়া ব্যালেন্স: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong> অফিসে জমা দিয়ে অ্যাকাউন্ট সক্রিয় করুন। স্থগিত থাকা অবস্থায় নতুন কোনো অর্ডার গ্রহণ করা যাবে না।
+                {language === 'bn'
+                  ? <>হাতে থাকা বকেয়া ব্যালেন্স: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong> অফিসে জমা দিয়ে অ্যাকাউন্ট সক্রিয় করুন।</>
+                  : <>Cash in hand balance: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong>. Please deposit at admin office to reactivate.</>}
               </p>
             </div>
           </div>
@@ -362,7 +375,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               }}
               className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors shrink-0"
             >
-              এডমিন অফিসে ক্যাশ জমা দিন
+              {language === 'bn' ? 'এডমিন অফিসে ক্যাশ জমা দিন' : 'Deposit Cash to Admin'}
             </button>
           )}
         </div>
@@ -376,8 +389,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-slate-900">তারিখ অনুযায়ী ডেলিভারি ও হিসাব ফিল্টারিং</h3>
-              <p className="text-[10px] text-slate-500">নির্দিষ্ট সময়ের ডেলিভারি সংখ্যা, ব্যালেন্স ও আয় ফিল্টার করুন</p>
+              <h3 className="text-xs font-bold text-slate-900">
+                {language === 'bn' ? 'তারিখ অনুযায়ী ডেলিভারি ও হিসাব ফিল্টারিং' : 'Date Filter & Earnings'}
+              </h3>
+              <p className="text-[10px] text-slate-500">
+                {language === 'bn'
+                  ? 'নির্দিষ্ট সময়ের ডেলিভারি সংখ্যা, ব্যালেন্স ও আয় ফিল্টার করুন'
+                  : 'Filter deliveries, balances, and rider earnings by date'}
+              </p>
             </div>
           </div>
 
@@ -391,7 +410,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              সকল সময়
+              {language === 'bn' ? 'সকল সময়' : 'All Time'}
             </button>
             <button
               type="button"
@@ -402,7 +421,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              আজকে
+              {language === 'bn' ? 'আজকে' : 'Today'}
             </button>
             <button
               type="button"
@@ -413,7 +432,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              গতকাল
+              {language === 'bn' ? 'গতকাল' : 'Yesterday'}
             </button>
             <button
               type="button"
@@ -424,7 +443,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              গত ৭ দিন
+              {language === 'bn' ? 'গত ৭ দিন' : 'Past 7 Days'}
             </button>
             <button
               type="button"
@@ -435,7 +454,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              এই মাস
+              {language === 'bn' ? 'এই মাস' : 'This Month'}
             </button>
 
             <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">

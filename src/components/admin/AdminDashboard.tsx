@@ -41,6 +41,10 @@ import {
   AlertTriangle,
   History,
   Phone,
+  Eye,
+  EyeOff,
+  Lock,
+  Globe,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -51,6 +55,8 @@ interface AdminDashboardProps {
   registeredRiders: DeliveryRiderAccount[];
   unions?: UnionArea[];
   onAddProduct: (prod: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onUpdateProduct?: (prodId: string, updates: Partial<Product>) => void;
+  onToggleProductPrivate?: (prodId: string, isPrivate: boolean) => void;
   onDeleteProduct: (prodId: string) => void;
   onAddMarket: (market: Omit<Market, 'id'>) => void;
   onDeleteMarket: (marketId: string) => void;
@@ -72,6 +78,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   registeredRiders,
   unions = SEED_UNIONS,
   onAddProduct,
+  onUpdateProduct,
+  onToggleProductPrivate,
   onDeleteProduct,
   onAddMarket,
   onDeleteMarket,
@@ -140,11 +148,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [prodPrice, setProdPrice] = useState<number>(100);
   const [prodUnit, setProdUnit] = useState<ProductUnit>('kg');
   const [prodStock, setProdStock] = useState<number>(50);
-  const [prodCategory, setProdCategory] = useState<string>('groceries');
-  const [prodArea, setProdArea] = useState<string>(markets[0]?.id || 'kaliganj');
-  const [prodImage, setProdImage] = useState<string>(
-    'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=500&q=80'
-  );
+  const [prodCategory, setProdCategory] = useState<string>('daily_products');
+  const [prodArea, setProdArea] = useState<string>('all');
+  const [prodDescBn, setProdDescBn] = useState('');
+  const [prodDescEn, setProdDescEn] = useState('');
+  const [prodIsPrivate, setProdIsPrivate] = useState<boolean>(false);
+  const [prodImage, setProdImage] = useState<string>('https://placehold.co/600x600?text=Product');
+
+  // Edit Product Form State
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProdNameBn, setEditProdNameBn] = useState('');
+  const [editProdNameEn, setEditProdNameEn] = useState('');
+  const [editProdPrice, setEditProdPrice] = useState<number>(100);
+  const [editProdUnit, setEditProdUnit] = useState<ProductUnit>('kg');
+  const [editProdStock, setEditProdStock] = useState<number>(50);
+  const [editProdCategory, setEditProdCategory] = useState<string>('daily_products');
+  const [editProdArea, setEditProdArea] = useState<string>('all');
+  const [editProdDescBn, setEditProdDescBn] = useState('');
+  const [editProdDescEn, setEditProdDescEn] = useState('');
+  const [editProdIsPrivate, setEditProdIsPrivate] = useState<boolean>(false);
+  const [editProdImage, setEditProdImage] = useState<string>('');
+
+  // Admin Product Table Search & Filter
+  const [adminProductSearch, setAdminProductSearch] = useState('');
+  const [adminProductCategoryFilter, setAdminProductCategoryFilter] = useState('all');
 
   // Add Area Form State
   const [showAddAreaModal, setShowAddAreaModal] = useState(false);
@@ -256,20 +283,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     onAddProduct({
       shopId: 'admin-store',
-      marketId: prodArea,
+      marketId: prodArea === 'all' ? 'all' : prodArea,
+      area: prodArea === 'all' ? 'সকল এরিয়া' : markets.find((m) => m.id === prodArea)?.nameBn || prodArea,
       categoryId: prodCategory,
-      nameEn: prodNameEn,
-      nameBn: prodNameBn,
+      nameEn: prodNameEn.trim(),
+      nameBn: prodNameBn.trim(),
+      descriptionBn: prodDescBn.trim() || undefined,
+      descriptionEn: prodDescEn.trim() || undefined,
       price: Number(prodPrice),
       unit: prodUnit,
       stock: Number(prodStock),
       isAvailable: Number(prodStock) > 0,
-      imageUrl: prodImage,
+      imageUrl: prodImage.trim() || `https://placehold.co/600x600?text=${encodeURIComponent(prodNameEn.trim())}`,
+      isPrivate: prodIsPrivate,
     });
 
     setShowAddProductModal(false);
     setProdNameBn('');
     setProdNameEn('');
+    setProdDescBn('');
+    setProdDescEn('');
+    setProdIsPrivate(false);
+  };
+
+  const openEditProductModal = (p: Product) => {
+    setEditingProduct(p);
+    setEditProdNameBn(p.nameBn || '');
+    setEditProdNameEn(p.nameEn || '');
+    setEditProdCategory(p.categoryId || 'daily_products');
+    setEditProdPrice(p.price || 0);
+    setEditProdUnit(p.unit || 'kg');
+    setEditProdStock(p.stock || 0);
+    setEditProdArea(p.marketId === 'all' || p.area === 'সকল এরিয়া' ? 'all' : p.marketId || 'all');
+    setEditProdImage(p.imageUrl || '');
+    setEditProdDescBn(p.descriptionBn || '');
+    setEditProdDescEn(p.descriptionEn || '');
+    setEditProdIsPrivate(Boolean(p.isPrivate));
+  };
+
+  const handleEditProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !editProdNameBn.trim() || !editProdNameEn.trim()) return;
+
+    if (onUpdateProduct) {
+      onUpdateProduct(editingProduct.id, {
+        nameBn: editProdNameBn.trim(),
+        nameEn: editProdNameEn.trim(),
+        categoryId: editProdCategory,
+        price: Number(editProdPrice),
+        unit: editProdUnit,
+        stock: Number(editProdStock),
+        isAvailable: Number(editProdStock) > 0,
+        marketId: editProdArea === 'all' ? 'all' : editProdArea,
+        area: editProdArea === 'all' ? 'সকল এরিয়া' : markets.find((m) => m.id === editProdArea)?.nameBn || editProdArea,
+        imageUrl: editProdImage.trim() || editingProduct.imageUrl,
+        descriptionBn: editProdDescBn.trim() || undefined,
+        descriptionEn: editProdDescEn.trim() || undefined,
+        isPrivate: editProdIsPrivate,
+      });
+    }
+
+    setEditingProduct(null);
   };
 
   const handleAreaSubmit = (e: React.FormEvent) => {
@@ -365,9 +439,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">এডমিন কন্ট্রোল প্যানেল (Admin Panel)</h1>
+            <h1 className="text-xl font-bold">
+              {language === 'bn' ? 'এডমিন কন্ট্রোল প্যানেল' : 'Admin Control Panel'}
+            </h1>
             <p className="text-xs text-slate-300 mt-0.5">
-              গাজীপুর (কালীগঞ্জ ও কাপাসিয়া) এরিয়া, ইউনিয়নভিত্তিক রাইডার ম্যানেজমেন্ট ও অর্ডার ডিস্ট্রিবিউশন
+              {language === 'bn'
+                ? 'গাজীপুর (কালীগঞ্জ ও কাপাসিয়া) এরিয়া, ইউনিয়নভিত্তিক রাইডার ম্যানেজমেন্ট ও অর্ডার ডিস্ট্রিবিউশন'
+                : 'Gazipur (Kaliganj & Kapasia) Regional & Union-based Rider Dispatch & Operations'}
             </p>
           </div>
         </div>
@@ -381,23 +459,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm transition-colors"
           >
             <Bike className="w-4 h-4" />
-            <span>নতুন রাইডার রেজিস্টার</span>
+            <span>{language === 'bn' ? 'নতুন রাইডার রেজিস্টার' : 'Register Rider'}</span>
           </button>
           <button
             onClick={() => setShowAddProductModal(true)}
             className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold py-2 px-3 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>পণ্য যোগ করুন</span>
+            <span>{language === 'bn' ? 'পণ্য যোগ করুন' : 'Add Product'}</span>
           </button>
           {onLogout && (
             <button
               onClick={onLogout}
               className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold py-2 px-3 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm transition-colors"
-              title="এডমিন প্যানেল থেকে লগআউট করুন"
+              title={language === 'bn' ? 'এডমিন প্যানেল থেকে লগআউট করুন' : 'Log out from admin panel'}
             >
               <LogOut className="w-4 h-4" />
-              <span>লগআউট</span>
+              <span>{language === 'bn' ? 'লগআউট' : 'Logout'}</span>
             </button>
           )}
         </div>
@@ -414,7 +492,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Clock className="w-4 h-4" />
-          <span>নতুন Order ({newOrders.length})</span>
+          <span>{language === 'bn' ? 'নতুন অর্ডার' : 'New Orders'} ({newOrders.length})</span>
         </button>
 
         <button
@@ -426,7 +504,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Package className="w-4 h-4" />
-          <span>ALL order ({orders.length})</span>
+          <span>{language === 'bn' ? 'সকল অর্ডার' : 'All Orders'} ({orders.length})</span>
         </button>
 
         <button
@@ -438,7 +516,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Wallet className="w-4 h-4" />
-          <span>রাইডার ব্যালেন্স ও রিপোর্ট ({registeredRiders.length})</span>
+          <span>{language === 'bn' ? 'রাইডার ব্যালেন্স ও রিপোর্ট' : 'Rider Balances & Reports'} ({registeredRiders.length})</span>
           {totalUnsettledCashAllRiders > 0 && (
             <span
               className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
@@ -461,7 +539,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Bike className="w-4 h-4" />
-          <span>রাইডার ম্যানেজমেন্ট ({registeredRiders.length})</span>
+          <span>{language === 'bn' ? 'রাইডার ম্যানেজমেন্ট' : 'Riders'} ({registeredRiders.length})</span>
         </button>
 
         <button
@@ -473,7 +551,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Building className="w-4 h-4" />
-          <span>এরিয়া ও ইউনিয়ন ({markets.length} থানা / {unions.length} ইউনিয়ন)</span>
+          <span>{language === 'bn' ? `এরিয়া ও ইউনিয়ন (${markets.length} থানা / ${unions.length} ইউনিয়ন)` : `Areas & Unions (${markets.length} Thanas / ${unions.length} Unions)`}</span>
         </button>
 
         <button
@@ -485,7 +563,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Package className="w-4 h-4" />
-          <span>প্রোডাক্ট ক্যাটালগ ({products.length})</span>
+          <span>{language === 'bn' ? 'প্রোডাক্ট ক্যাটালগ' : 'Product Catalog'} ({products.length})</span>
         </button>
       </div>
 
@@ -1497,66 +1575,220 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 5: PRODUCTS */}
       {activeTab === 'products' && (
         <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-800">
                 এডমিন প্রোডাক্ট তালিকা ({products.length} টি)
               </h2>
               <p className="text-xs text-slate-500">
-                দোকানদার কোনো কিছু এড করতে পারে না; এডমিন যা এড করে তাই শুধু ওয়েবসাইটে দেখায়।
+                ৩টি ক্যাটাগরি: Daily Products, Personal Care, Fuel & Energy। এডমিন এখান থেকে যেকোনো প্রোডাক্ট Edit, Delete ও Private করতে পারেন।
               </p>
             </div>
             <button
               onClick={() => setShowAddProductModal(true)}
-              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold py-2 px-3.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm"
+              className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold py-2 px-3.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-sm self-start sm:self-auto cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>নতুন প্রোডাক্ট যোগ করুন</span>
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-400 font-semibold bg-slate-50">
-                  <th className="py-2.5 px-3">ছবি</th>
-                  <th className="py-2.5 px-3">নাম (বাংলা)</th>
-                  <th className="py-2.5 px-3">ক্যাটাগরি</th>
-                  <th className="py-2.5 px-3">মূল্য</th>
-                  <th className="py-2.5 px-3">মজুদ</th>
-                  <th className="py-2.5 px-3 text-right">অ্যাকশন</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {products.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3">
-                      <img
-                        src={p.imageUrl}
-                        alt=""
-                        className="w-10 h-10 object-cover rounded-xl border border-slate-200"
-                      />
-                    </td>
-                    <td className="py-2.5 px-3 font-bold text-slate-900">{p.nameBn}</td>
-                    <td className="py-2.5 px-3 text-slate-500">{p.categoryId}</td>
-                    <td className="py-2.5 px-3 font-bold text-emerald-800">
-                      {formatBDT(p.price)} / {p.unit}
-                    </td>
-                    <td className="py-2.5 px-3 font-semibold">{p.stock} {p.unit}</td>
-                    <td className="py-2.5 px-3 text-right">
-                      <button
-                        onClick={() => onDeleteProduct(p.id)}
-                        className="text-rose-500 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-50"
-                        title="Delete product"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Product Category Filter & Search Bar */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between pt-2">
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: 'all', label: 'সকল প্রোডাক্ট (All)' },
+                { id: 'daily_products', label: 'Daily Products' },
+                { id: 'personal_care', label: 'Personal Care' },
+                { id: 'fuel_energy', label: 'Fuel & Energy' },
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setAdminProductCategoryFilter(c.id)}
+                  className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all ${
+                    adminProductCategoryFilter === c.id
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={adminProductSearch}
+                onChange={(e) => setAdminProductSearch(e.target.value)}
+                placeholder="প্রোডাক্ট খুঁজুন (নাম বা এরিয়া)..."
+                className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:border-emerald-600"
+              />
+            </div>
           </div>
+
+          {/* Products Table */}
+          {(() => {
+            const filtered = products.filter((p) => {
+              const matchCat =
+                adminProductCategoryFilter === 'all' || p.categoryId === adminProductCategoryFilter;
+              const q = adminProductSearch.toLowerCase().trim();
+              const matchQuery =
+                !q ||
+                p.nameBn.toLowerCase().includes(q) ||
+                p.nameEn.toLowerCase().includes(q) ||
+                (p.area && p.area.toLowerCase().includes(q)) ||
+                (p.marketId && p.marketId.toLowerCase().includes(q));
+              return matchCat && matchQuery;
+            });
+
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-400 font-semibold bg-slate-50">
+                      <th className="py-2.5 px-3">ছবি</th>
+                      <th className="py-2.5 px-3">নাম (English / বাংলা)</th>
+                      <th className="py-2.5 px-3">ক্যাটাগরি</th>
+                      <th className="py-2.5 px-3">এরিয়া</th>
+                      <th className="py-2.5 px-3">মূল্য</th>
+                      <th className="py-2.5 px-3">মজুদ</th>
+                      <th className="py-2.5 px-3">দৃশ্যমানতা</th>
+                      <th className="py-2.5 px-3 text-right">অ্যাকশন (Edit / Private / Delete)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                          কোনো প্রোডাক্ট পাওয়া যায়নি।
+                        </td>
+                      </tr>
+                    ) : (
+                      filtered.map((p) => {
+                        const isCatDaily = p.categoryId === 'daily_products';
+                        const isCatPersonal = p.categoryId === 'personal_care';
+                        const isCatFuel = p.categoryId === 'fuel_energy';
+
+                        return (
+                          <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${p.isPrivate ? 'bg-amber-50/40' : ''}`}>
+                            <td className="py-2.5 px-3">
+                              <img
+                                src={p.imageUrl}
+                                alt={p.nameEn}
+                                className="w-10 h-10 object-cover rounded-xl border border-slate-200 bg-white"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://placehold.co/600x600?text=' + encodeURIComponent(p.nameEn || 'Product');
+                                }}
+                              />
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-slate-900">{p.nameEn || p.nameBn}</div>
+                              <div className="text-[11px] text-slate-500 font-medium">{p.nameBn}</div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isCatDaily
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : isCatPersonal
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : isCatFuel
+                                    ? 'bg-amber-100 text-amber-900'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                {isCatDaily ? 'Daily Products' : isCatPersonal ? 'Personal Care' : isCatFuel ? 'Fuel & Energy' : p.categoryId}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
+                                {p.marketId === 'all' || p.area === 'সকল এরিয়া'
+                                  ? '🌐 সকল এরিয়া (All)'
+                                  : p.area || p.marketId}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-emerald-800">
+                              {formatBDT(p.price)} / {p.unit}
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold">
+                              <span className={p.stock < 10 ? 'text-rose-600 font-bold' : 'text-slate-700'}>
+                                {p.stock} {p.unit}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {p.isPrivate ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <Lock className="w-3 h-3 text-amber-700" />
+                                  <span>Private (গোপন)</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <Globe className="w-3 h-3 text-emerald-700" />
+                                  <span>Public (উন্মুক্ত)</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Edit Product */}
+                                <button
+                                  type="button"
+                                  onClick={() => openEditProductModal(p)}
+                                  className="p-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer"
+                                  title="Edit Product (সম্পাদনা করুন)"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Toggle Private / Public */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (onToggleProductPrivate) {
+                                      onToggleProductPrivate(p.id, !p.isPrivate);
+                                    }
+                                  }}
+                                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                    p.isPrivate
+                                      ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                                      : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                  }`}
+                                  title={p.isPrivate ? 'Make Public (উন্মুক্ত করুন)' : 'Make Private (গোপন করুন)'}
+                                >
+                                  {p.isPrivate ? (
+                                    <Eye className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <EyeOff className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+
+                                {/* Delete Product */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Are you sure you want to delete "${p.nameEn || p.nameBn}"?`)) {
+                                      onDeleteProduct(p.id);
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
+                                  title="Delete Product (মুছে ফেলুন)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1878,40 +2110,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* MODAL: ADD PRODUCT */}
       {showAddProductModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-              <h3 className="font-bold text-slate-900 text-sm">নতুন প্রোডাক্ট যোগ করুন (এডমিন)</h3>
-              <button onClick={() => setShowAddProductModal(false)} className="text-slate-400">✕</button>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">নতুন প্রোডাক্ট যোগ করুন (এডমিন)</h3>
+                <p className="text-[11px] text-slate-500">৩টি প্রধান ক্যাটাগরি ও সকল এরিয়া সাপোর্ট সহ</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                ✕
+              </button>
             </div>
 
-            <form onSubmit={handleProductSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">পণ্যের নাম (বাংলা)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="যেমন: দেশি পাকা কলা"
-                  value={prodNameBn}
-                  onChange={(e) => setProdNameBn(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-200"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Name (English)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Fresh Ripe Banana"
-                  value={prodNameEn}
-                  onChange={(e) => setProdNameEn(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-200"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handleProductSubmit} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">মূল্য (৳ BDT)</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    পণ্যের নাম (বাংলা) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="যেমন: মিনিকেট চাল"
+                    value={prodNameBn}
+                    onChange={(e) => setProdNameBn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Name (English) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Miniket Rice"
+                    value={prodNameEn}
+                    onChange={(e) => setProdNameEn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              {/* Category Selection */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  ক্যাটাগরি নির্বাচন করুন <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={prodCategory}
+                  onChange={(e) => setProdCategory(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-slate-50"
+                >
+                  <option value="daily_products">১. Daily Products (নিত্যপ্রয়োজনীয় বাজার)</option>
+                  <option value="personal_care">২. Personal Care (ব্যক্তিগত যত্ন ও প্রসাধন)</option>
+                  <option value="fuel_energy">৩. Fuel & Energy (জ্বালানি ও গ্যাস)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    মূল্য (৳ BDT) <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -1926,24 +2190,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <select
                     value={prodUnit}
                     onChange={(e) => setProdUnit(e.target.value as ProductUnit)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-semibold"
                   >
                     <option value="kg">কেজি (kg)</option>
                     <option value="gm">গ্রাম (gm)</option>
+                    <option value="liter">লিটার (liter)</option>
                     <option value="litre">লিটার (litre)</option>
                     <option value="piece">টি / পিস (piece)</option>
-                    <option value="dozen">ডজন (dozen)</option>
                     <option value="pack">প্যাকেট (pack)</option>
+                    <option value="bottle">বোতল (bottle)</option>
+                    <option value="dozen">ডজন (dozen)</option>
+                    <option value="cylinder">সিলিন্ডার (cylinder)</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">মজুদ (Stock)</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     required
                     value={prodStock}
                     onChange={(e) => setProdStock(Number(e.target.value))}
@@ -1955,8 +2222,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <select
                     value={prodArea}
                     onChange={(e) => setProdArea(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-slate-50"
                   >
+                    <option value="all">🌐 সকল এরিয়া (All Areas)</option>
                     {markets.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.nameBn} ({m.cityBn})
@@ -1970,18 +2238,259 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <label className="font-semibold text-slate-700 block mb-1">ছবির লিংক (Image URL)</label>
                 <input
                   type="text"
+                  placeholder="https://..."
                   value={prodImage}
                   onChange={(e) => setProdImage(e.target.value)}
-                  className="w-full p-2 rounded-xl border border-slate-200"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-[11px]"
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">বিবরণ (বাংলা)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="প্রোডাক্টের সংক্ষিপ্ত বিবরণ..."
+                    value={prodDescBn}
+                    onChange={(e) => setProdDescBn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 resize-none text-[11px]"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Description (English)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Short product description..."
+                    value={prodDescEn}
+                    onChange={(e) => setProdDescEn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 resize-none text-[11px]"
+                  />
+                </div>
+              </div>
+
+              {/* Private Checkbox */}
+              <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-800 block text-xs">গোপন রাখুন (Private Product)</span>
+                  <span className="text-[11px] text-slate-500">
+                    চেক করা থাকলে সাধারণ ক্রেতারা এটি দেখতে পাবে না (কেবল এডমিন দেখবে)
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={prodIsPrivate}
+                  onChange={(e) => setProdIsPrivate(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  প্রোডাক্ট প্রকাশ করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT PRODUCT */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">প্রোডাক্ট সম্পাদনা করুন (Edit Product)</h3>
+                <p className="text-[11px] text-slate-500">ID: {editingProduct.id}</p>
+              </div>
               <button
-                type="submit"
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors"
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
               >
-                প্রোডাক্ট প্রকাশ করুন
+                ✕
               </button>
+            </div>
+
+            <form onSubmit={handleEditProductSubmit} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    পণ্যের নাম (বাংলা) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editProdNameBn}
+                    onChange={(e) => setEditProdNameBn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Name (English) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editProdNameEn}
+                    onChange={(e) => setEditProdNameEn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              {/* Category Selection */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  ক্যাটাগরি <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={editProdCategory}
+                  onChange={(e) => setEditProdCategory(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-slate-50"
+                >
+                  <option value="daily_products">১. Daily Products (নিত্যপ্রয়োজনীয় বাজার)</option>
+                  <option value="personal_care">২. Personal Care (ব্যক্তিগত যত্ন ও প্রসাধন)</option>
+                  <option value="fuel_energy">৩. Fuel & Energy (জ্বালানি ও গ্যাস)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    মূল্য (৳ BDT) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editProdPrice}
+                    onChange={(e) => setEditProdPrice(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">একক (Unit)</label>
+                  <select
+                    value={editProdUnit}
+                    onChange={(e) => setEditProdUnit(e.target.value as ProductUnit)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-semibold"
+                  >
+                    <option value="kg">কেজি (kg)</option>
+                    <option value="gm">গ্রাম (gm)</option>
+                    <option value="liter">লিটার (liter)</option>
+                    <option value="litre">লিটার (litre)</option>
+                    <option value="piece">টি / পিস (piece)</option>
+                    <option value="pack">প্যাকেট (pack)</option>
+                    <option value="bottle">বোতল (bottle)</option>
+                    <option value="dozen">ডজন (dozen)</option>
+                    <option value="cylinder">সিলিন্ডার (cylinder)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">মজুদ (Stock)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editProdStock}
+                    onChange={(e) => setEditProdStock(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">এরিয়া (Area)</label>
+                  <select
+                    value={editProdArea}
+                    onChange={(e) => setEditProdArea(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-slate-50"
+                  >
+                    <option value="all">🌐 সকল এরিয়া (All Areas)</option>
+                    {markets.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nameBn} ({m.cityBn})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">ছবির লিংক (Image URL)</label>
+                <input
+                  type="text"
+                  value={editProdImage}
+                  onChange={(e) => setEditProdImage(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-[11px]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">বিবরণ (বাংলা)</label>
+                  <textarea
+                    rows={2}
+                    value={editProdDescBn}
+                    onChange={(e) => setEditProdDescBn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 resize-none text-[11px]"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Description (English)</label>
+                  <textarea
+                    rows={2}
+                    value={editProdDescEn}
+                    onChange={(e) => setEditProdDescEn(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 resize-none text-[11px]"
+                  />
+                </div>
+              </div>
+
+              {/* Private Checkbox */}
+              <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-800 block text-xs">গোপন রাখুন (Private Product)</span>
+                  <span className="text-[11px] text-slate-500">
+                    চেক করা থাকলে সাধারণ ক্রেতারা এটি দেখতে পাবে না (শুধু এডমিন দেখবে)
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editProdIsPrivate}
+                  onChange={(e) => setEditProdIsPrivate(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  পরিবর্তন সংরক্ষণ করুন
+                </button>
+              </div>
             </form>
           </div>
         </div>

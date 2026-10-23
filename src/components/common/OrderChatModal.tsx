@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Order, OrderMessage } from '../../types';
+import { useLanguage } from '../../hooks/useLanguage';
 import {
   MessageSquare,
   Send,
@@ -30,6 +31,7 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
   onClose,
   onSendMessage,
 }) => {
+  const { language } = useLanguage();
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -67,24 +69,38 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
     }
   };
 
-  // Quick preset suggestions based on current role
+  // Quick preset suggestions based on current role and language
   const quickSuggestions: Record<'admin' | 'rider' | 'customer', string[]> = {
-    rider: [
+    rider: language === 'bn' ? [
       'আমি পণ্য নিয়ে রওনা হয়েছি',
       'আপনার লোকেশনের কাছাকাছি আছি',
       'একটু ফোনে কথা বলতে পারবেন?',
       '৫ মিনিটের মধ্যে পৌঁছে যাচ্ছি',
+    ] : [
+      'On my way with your order',
+      'Near your location',
+      'Please check your phone call',
+      'Arriving in 5 minutes',
     ],
-    admin: [
+    admin: language === 'bn' ? [
       'আপনার অর্ডারটি প্রস্তুত করা হচ্ছে',
       'রাইডারকে আপনার অর্ডারে অ্যাসাইন করা হয়েছে',
       'কোনো স্পেশাল নির্দেশনা থাকলে জানাতে পারেন',
+    ] : [
+      'Your order is being prepared',
+      'A rider has been assigned to your order',
+      'Please let us know if you have special requests',
     ],
-    customer: [
+    customer: language === 'bn' ? [
       'আমি বাসায় আছি, গেটে নক দিবেন',
       'কতক্ষণ লাগবে ভাইয়া?',
       'গেটের কাছে এসে কল দিন প্লিজ',
       'ক্যাশ টাকা রেডি আছে',
+    ] : [
+      'I am at home, please knock at the gate',
+      'How much time will it take?',
+      'Please call when near the gate',
+      'Cash on delivery is ready',
     ],
   };
 
@@ -93,7 +109,7 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full">
           <ShieldCheck className="w-3 h-3 text-emerald-700" />
-          <span>এডমিন ({name})</span>
+          <span>{language === 'bn' ? 'এডমিন' : 'Admin'} ({name})</span>
         </span>
       );
     }
@@ -101,14 +117,14 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded-full">
           <Bike className="w-3 h-3 text-blue-700" />
-          <span>রাইডার ({name})</span>
+          <span>{language === 'bn' ? 'রাইডার' : 'Rider'} ({name})</span>
         </span>
       );
     }
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
         <User className="w-3 h-3 text-amber-700" />
-        <span>কাস্টমার ({name})</span>
+        <span>{language === 'bn' ? 'গ্রাহক' : 'Customer'} ({name})</span>
       </span>
     );
   };
@@ -125,14 +141,14 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-sm sm:text-base text-white">
-                  অর্ডার চ্যাট ও মেসেজ
+                  {language === 'bn' ? 'অর্ডার চ্যাট ও মেসেজ' : 'Order Live Chat'}
                 </h3>
                 <span className="font-mono text-xs text-emerald-300 font-bold bg-white/10 px-2 py-0.5 rounded-md">
                   #{order.id}
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 mt-0.5">
-                গ্রাহক: {order.customerName} ({order.customerPhone})
+                {language === 'bn' ? 'গ্রাহক: ' : 'Customer: '}{order.customerName} ({order.customerPhone})
               </p>
             </div>
           </div>
@@ -148,13 +164,18 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
         {/* Info banner about order participants */}
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 text-[11px] text-slate-600 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-slate-700">অংশগ্রহণকারী:</span>
-            <span>এডমিন</span> •{' '}
-            <span>{order.riderName ? `রাইডার: ${order.riderName}` : 'রাইডার (অ্যাসাইন হলে)'}</span> •{' '}
-            <span>গ্রাহক</span>
+            <span className="font-bold text-slate-700">{language === 'bn' ? 'অংশগ্রহণকারী:' : 'Participants:'}</span>
+            <span>{language === 'bn' ? 'এডমিন' : 'Admin'}</span> •{' '}
+            <span>{order.riderName ? `${language === 'bn' ? 'রাইডার: ' : 'Rider: '}${order.riderName}` : (language === 'bn' ? 'রাইডার (অ্যাসাইন হলে)' : 'Rider (when assigned)')}</span> •{' '}
+            <span>{language === 'bn' ? 'গ্রাহক' : 'Customer'}</span>
           </div>
           <span className="text-emerald-700 font-bold">
-            আপনি: {currentUserRole === 'admin' ? 'এডমিন' : currentUserRole === 'rider' ? 'রাইডার' : 'কাস্টমার'}
+            {language === 'bn' ? 'আপনি: ' : 'You: '}
+            {currentUserRole === 'admin'
+              ? (language === 'bn' ? 'এডমিন' : 'Admin')
+              : currentUserRole === 'rider'
+              ? (language === 'bn' ? 'রাইডার' : 'Rider')
+              : (language === 'bn' ? 'গ্রাহক' : 'Customer')}
           </span>
         </div>
 
@@ -162,7 +183,7 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
         {order.notes && (
           <div className="bg-amber-50 border-b border-amber-200/80 px-4 py-2 text-xs text-amber-950 flex items-start gap-2 shrink-0">
             <span className="font-bold shrink-0 flex items-center gap-1 text-amber-900">
-              📝 অর্ডারের নোট:
+              📝 {language === 'bn' ? 'অর্ডারের নোট:' : 'Order Note:'}
             </span>
             <span className="font-medium italic">{order.notes}</span>
           </div>
@@ -176,10 +197,12 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
                 <MessageSquare className="w-6 h-6" />
               </div>
               <p className="text-xs font-semibold text-slate-600">
-                এই অর্ডারে এখনো কোনো মেসেজ দেওয়া হয়নি
+                {language === 'bn' ? 'এই অর্ডারে এখনো কোনো মেসেজ দেওয়া হয়নি' : 'No messages in this order yet'}
               </p>
               <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
-                ডেলিভারি বা পণ্য সংক্রান্ত যেকোনো বার্তা এখানে লিখুন। এডমিন, রাইডার ও গ্রাহক একে অপরের মেসেজ দেখতে ও উত্তর দিতে পারবেন।
+                {language === 'bn'
+                  ? 'ডেলিভারি বা পণ্য সংক্রান্ত যেকোনো বার্তা এখানে লিখুন। এডমিন, রাইডার ও গ্রাহক একে অপরের মেসেজ দেখতে ও উত্তর দিতে পারবেন।'
+                  : 'Chat regarding delivery, items, or timing. Admin, Rider, and Customer can communicate in real-time.'}
               </p>
             </div>
           ) : (
@@ -226,7 +249,7 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
         <div className="px-3 pt-2 pb-1 bg-white border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           <span className="text-[10px] font-bold text-slate-400 shrink-0 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-500" />
-            দ্রুত পাঠান:
+            {language === 'bn' ? 'দ্রুত পাঠান:' : 'Quick send:'}
           </span>
           {quickSuggestions[currentUserRole].map((sug, idx) => (
             <button
@@ -251,8 +274,8 @@ export const OrderChatModal: React.FC<OrderChatModalProps> = ({
             type="text"
             placeholder={
               currentUserRole === 'customer'
-                ? 'রাইডার বা এডমিনকে মেসেজ লিখুন...'
-                : 'গ্রাহককে মেসেজ পাঠান...'
+                ? (language === 'bn' ? 'রাইডার বা এডমিনকে মেসেজ লিখুন...' : 'Write message to rider or admin...')
+                : (language === 'bn' ? 'গ্রাহককে মেসেজ পাঠান...' : 'Send message to customer...')
             }
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}

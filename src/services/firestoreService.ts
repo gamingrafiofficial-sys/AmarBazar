@@ -55,12 +55,30 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
       }
     }
 
-    // 2. Seed Products
+    // 2. Seed Products (Ensuring the user's 55 products across 3 categories are populated)
     const productsSnap = await getDocs(collection(db, PRODUCTS_COL));
-    if (productsSnap.empty) {
-      for (const p of SEED_PRODUCTS) {
-        await setDoc(doc(db, PRODUCTS_COL, p.id), p);
+    const shouldSyncProducts =
+      productsSnap.empty ||
+      productsSnap.size < 50 ||
+      productsSnap.docs.some((d) => {
+        const cat = d.data()?.categoryId;
+        return cat && !['daily_products', 'personal_care', 'fuel_energy'].includes(cat);
+      });
+
+    if (shouldSyncProducts) {
+      console.log('🔄 Syncing 55 products to Firestore catalog...');
+      // Remove obsolete/legacy products if present
+      for (const d of productsSnap.docs) {
+        const cat = d.data()?.categoryId;
+        if (cat && !['daily_products', 'personal_care', 'fuel_energy'].includes(cat)) {
+          await deleteDoc(d.ref);
+        }
       }
+      // Populate/upsert user's 55 products
+      for (const p of SEED_PRODUCTS) {
+        await setDoc(doc(db, PRODUCTS_COL, p.id), p, { merge: true });
+      }
+      console.log('✅ 55 products catalog successfully synced to Firestore.');
     }
 
     // 3. Seed Riders
@@ -423,6 +441,38 @@ export async function deleteProductOnline(productId: string): Promise<void> {
     await deleteDoc(doc(db, PRODUCTS_COL, productId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${PRODUCTS_COL}/${productId}`);
+  }
+}
+
+export async function updateProductOnline(
+  productId: string,
+  updates: Partial<Product>
+): Promise<void> {
+  try {
+    const prodRef = doc(db, PRODUCTS_COL, productId);
+    await updateDoc(prodRef, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${PRODUCTS_COL}/${productId}`);
+  }
+}
+
+export async function resyncProductsTo55CatalogOnline(): Promise<void> {
+  try {
+    const productsSnap = await getDocs(collection(db, PRODUCTS_COL));
+    for (const d of productsSnap.docs) {
+      const cat = d.data()?.categoryId;
+      if (cat && !['daily_products', 'personal_care', 'fuel_energy'].includes(cat)) {
+        await deleteDoc(d.ref);
+      }
+    }
+    for (const p of SEED_PRODUCTS) {
+      await setDoc(doc(db, PRODUCTS_COL, p.id), p, { merge: true });
+    }
+  } catch (error) {
+    console.warn('Catalog resync error:', error);
   }
 }
 

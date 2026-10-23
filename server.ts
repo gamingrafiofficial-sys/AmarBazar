@@ -426,6 +426,50 @@ app.post('/api/products/create', async (req, res) => {
   }
 });
 
+app.put('/api/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    if (!updates) {
+      return res.status(400).json({ error: 'No update data provided' });
+    }
+    const idx = inMemoryDB.products.findIndex((p) => p.id === id);
+    if (idx !== -1) {
+      inMemoryDB.products[idx] = {
+        ...inMemoryDB.products[idx],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      inMemoryDB.products.unshift({
+        id,
+        ...updates,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // Also persist updates in Cloud SQL (PostgreSQL)
+    try {
+      await sqlDb.update(sqlSchema.products).set({
+        price: updates.price !== undefined ? Number(updates.price) : undefined,
+        stock: updates.stock !== undefined ? Number(updates.stock) : undefined,
+        nameEn: updates.nameEn,
+        nameBn: updates.nameBn,
+        imageUrl: updates.imageUrl,
+        isAvailable: updates.isAvailable,
+      }).where(eq(sqlSchema.products.id, id));
+    } catch (sqlErr) {
+      console.warn('Cloud SQL product update (non-blocking):', sqlErr);
+    }
+
+    const updatedProd = inMemoryDB.products.find((p) => p.id === id);
+    res.json({ success: true, product: updatedProd });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update product' });
+  }
+});
+
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;

@@ -306,7 +306,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         </button>
 
         <span className="text-xs font-semibold text-slate-500">
-          আমারবাজার • অ্যাকাউন্ট
+          {language === 'bn' ? 'আমারবাজার • অ্যাকাউন্ট' : 'AmarBazaar • Account'}
         </span>
       </div>
 
@@ -316,15 +316,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           {/* Logo Badge */}
           <div className="text-center mb-6">
             <div className="w-14 h-14 bg-emerald-700 text-white rounded-2xl flex items-center justify-center font-black text-2xl mx-auto mb-3 shadow-md">
-              আ
+              {language === 'bn' ? 'আ' : 'AB'}
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {viewMode === 'login' ? 'লগইন' : 'নতুন অ্যাকাউন্ট তৈরি করুন'}
+              {viewMode === 'login'
+                ? (language === 'bn' ? 'লগইন' : 'Sign In')
+                : (language === 'bn' ? 'নতুন অ্যাকাউন্ট তৈরি করুন' : 'Create New Account')}
             </h1>
             <p className="text-xs text-slate-500 mt-1">
               {viewMode === 'login'
-                ? 'আপনার নম্বর ও পাসওয়ার্ড দিয়ে একাউন্টে প্রবেশ করুন'
-                : 'নাম, মোবাইল নম্বর ও ঠিকানা দিয়ে রেজিস্ট্রেশন করুন'}
+                ? (language === 'bn'
+                    ? 'আপনার নম্বর ও পাসওয়ার্ড দিয়ে একাউন্টে প্রবেশ করুন'
+                    : 'Enter your mobile number and password to sign in')
+                : (language === 'bn'
+                    ? 'নাম, মোবাইল নম্বর ও ঠিকানা দিয়ে রেজিস্ট্রেশন করুন'
+                    : 'Enter your name, mobile number, and address to register')}
             </p>
           </div>
 
@@ -349,7 +355,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               {/* Field 1: Identifier (Mobile Number or Admin Email) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  মোবাইল নম্বর <span className="text-rose-500">*</span>
+                  {language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
@@ -358,7 +364,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     required
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="Type Your Number"
+                    placeholder={language === 'bn' ? 'আপনার নম্বর লিখুন' : 'Enter mobile number'}
                     className="w-full text-xs pl-10 pr-3 py-3 rounded-xl border border-slate-200 focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-slate-50/50"
                   />
                 </div>
@@ -367,7 +373,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               {/* Field 2: Password */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  পাসওয়ার্ড <span className="text-rose-500">*</span>
+                  {language === 'bn' ? 'পাসওয়ার্ড' : 'Password'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
@@ -376,7 +382,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Type your Password"
+                    placeholder={language === 'bn' ? 'আপনার পাসওয়ার্ড লিখুন' : 'Enter your password'}
                     className="w-full text-xs pl-10 pr-10 py-3 rounded-xl border border-slate-200 focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-slate-50/50"
                   />
                   <button
@@ -405,24 +411,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 {authPhase === 'loading' && (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>যাচাই ও প্রবেশ করা হচ্ছে...</span>
+                    <span>{language === 'bn' ? 'যাচাই ও প্রবেশ করা হচ্ছে...' : 'Verifying and signing in...'}</span>
                   </>
                 )}
                 {authPhase === 'success' && (
                   <>
                     <CheckCircle2 className="w-5 h-5 text-white animate-bounce" />
-                    <span className="font-extrabold text-sm">✅ লগইন সফল! প্রবেশ করা হচ্ছে...</span>
+                    <span className="font-extrabold text-sm">{language === 'bn' ? '✅ লগইন সফল! প্রবেশ করা হচ্ছে...' : '✅ Login successful! Redirecting...'}</span>
                   </>
                 )}
                 {authPhase === 'failed' && (
                   <>
                     <AlertCircle className="w-4 h-4 text-white" />
-                    <span>লগইন ব্যর্থ হয়েছে</span>
+                    <span>{language === 'bn' ? 'লগইন ব্যর্থ হয়েছে' : 'Login failed'}</span>
                   </>
                 )}
                 {authPhase === 'idle' && (
                   <>
-                    <span>লগইন করুন</span>
+                    <span>{language === 'bn' ? 'লগইন করুন' : 'Sign In'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -431,7 +437,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               {/* Toggle to Registration */}
               <div className="text-center pt-3 border-t border-slate-100">
                 <p className="text-xs text-slate-500">
-                  এখনো অ্যাকাউন্ট নেই?{' '}
+                  {language === 'bn' ? 'এখনো অ্যাকাউন্ট নেই? ' : "Don't have an account? "}
                   <button
                     type="button"
                     onClick={() => {
@@ -441,7 +447,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     }}
                     className="text-emerald-700 font-bold hover:underline"
                   >
-                    এখানে রেজিস্ট্রেশন করুন
+                    {language === 'bn' ? 'এখানে রেজিস্ট্রেশন করুন' : 'Register here'}
                   </button>
                 </p>
               </div>
@@ -451,7 +457,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <form onSubmit={handleCustomerRegister} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  আপনার পূর্ণ নাম <span className="text-rose-500">*</span>
+                  {language === 'bn' ? 'আপনার পূর্ণ নাম' : 'Full Name'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -460,7 +466,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     required
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="যেমন: তানভীর আহমেদ"
+                    placeholder={language === 'bn' ? 'যেমন: তানভীর আহমেদ' : 'e.g., Tanvir Ahmed'}
                     className="w-full text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-emerald-600 bg-slate-50/50"
                   />
                 </div>
@@ -468,7 +474,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  মোবাইল নম্বর <span className="text-rose-500">*</span>
+                  {language === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Number'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -477,7 +483,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     required
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="Type Your Number"
+                    placeholder={language === 'bn' ? '০১xxxxxxxxx' : '01xxxxxxxxx'}
                     className="w-full text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-emerald-600 bg-slate-50/50 font-mono"
                   />
                 </div>
@@ -485,7 +491,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ডেলিভারি ঠিকানা <span className="text-rose-500">*</span>
+                  {language === 'bn' ? 'ডেলিভারি ঠিকানা' : 'Delivery Address'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -494,7 +500,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     required
                     value={regAddress}
                     onChange={(e) => setRegAddress(e.target.value)}
-                    placeholder="বাড়ি নং, রোড নং, কালীগঞ্জ বাজার, গাজীপুর"
+                    placeholder={language === 'bn' ? 'বাড়ি নং, রোড নং, কালীগঞ্জ বাজার, গাজীপুর' : 'House no, Road no, Kaliganj Bazar, Gazipur'}
                     className="w-full text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-emerald-600 bg-slate-50/50"
                   />
                 </div>
@@ -502,7 +508,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  পাসওয়ার্ড <span className="text-rose-500">*</span>
+                  {language === 'bn' ? 'পাসওয়ার্ড' : 'Password'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -511,7 +517,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     required
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Type your Password"
+                    placeholder={language === 'bn' ? 'পাসওয়ার্ড দিন' : 'Enter password'}
                     className="w-full text-xs pl-9 pr-10 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-emerald-600 bg-slate-50/50"
                   />
                   <button
@@ -538,32 +544,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 {authPhase === 'loading' && (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>অ্যাকাউন্ট তৈরি হচ্ছে...</span>
+                    <span>{language === 'bn' ? 'অ্যাকাউন্ট তৈরি হচ্ছে...' : 'Creating account...'}</span>
                   </>
                 )}
                 {authPhase === 'success' && (
                   <>
                     <CheckCircle2 className="w-5 h-5 text-white animate-bounce" />
-                    <span className="font-extrabold text-sm">✅ রেজিস্ট্রেশন সম্পন্ন হয়েছে!</span>
+                    <span className="font-extrabold text-sm">{language === 'bn' ? '✅ রেজিস্ট্রেশন সম্পন্ন হয়েছে!' : '✅ Registration completed!'}</span>
                   </>
                 )}
                 {authPhase === 'failed' && (
                   <>
                     <AlertCircle className="w-4 h-4 text-white" />
-                    <span>রেজিস্ট্রেশন ব্যর্থ হয়েছে</span>
+                    <span>{language === 'bn' ? 'রেজিস্ট্রেশন ব্যর্থ হয়েছে' : 'Registration failed'}</span>
                   </>
                 )}
                 {authPhase === 'idle' && (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>একাউন্ট তৈরি করুন</span>
+                    <span>{language === 'bn' ? 'একাউন্ট তৈরি করুন' : 'Create Account'}</span>
                   </>
                 )}
               </button>
 
               <div className="text-center pt-2">
                 <p className="text-xs text-slate-500">
-                  ইতিমধ্যে একাউন্ট আছে?{' '}
+                  {language === 'bn' ? 'ইতিমধ্যে একাউন্ট আছে? ' : 'Already have an account? '}
                   <button
                     type="button"
                     onClick={() => {
@@ -573,7 +579,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     }}
                     className="text-emerald-700 font-bold hover:underline"
                   >
-                    লগইন করুন
+                    {language === 'bn' ? 'লগইন করুন' : 'Sign In'}
                   </button>
                 </p>
               </div>

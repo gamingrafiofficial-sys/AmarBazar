@@ -152,7 +152,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         </button>
 
         <span className="text-xs font-semibold text-slate-500">
-          গ্রাহক প্রোফাইল ও অর্ডার ট্র্যাকিং
+          {language === 'bn' ? 'গ্রাহক প্রোফাইল ও অর্ডার ট্র্যাকিং' : 'Customer Profile & Order Tracking'}
         </span>
       </div>
 
@@ -163,7 +163,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             {/* Avatar */}
             <div className="relative">
               <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-emerald-700 text-white flex items-center justify-center font-black text-2xl sm:text-3xl shadow-md">
-                {customer.name ? customer.name.slice(0, 1) : 'গ'}
+                {customer.name ? customer.name.slice(0, 1).toUpperCase() : (language === 'bn' ? 'গ' : 'C')}
               </div>
               <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full"></span>
             </div>
@@ -175,7 +175,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 </h1>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
-                  ভেরিফাইড গ্রাহক
+                  {language === 'bn' ? 'ভেরিফাইড গ্রাহক' : 'Verified Customer'}
                 </span>
               </div>
               <p className="text-xs sm:text-sm font-semibold text-slate-600 flex items-center gap-1 mt-0.5 font-mono">
@@ -196,7 +196,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               className="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center gap-1.5 shadow-2xs"
             >
               <LogOut className="w-4 h-4" />
-              <span>লগআউট করুন</span>
+              <span>{language === 'bn' ? 'লগআউট করুন' : 'Log Out'}</span>
             </button>
           </div>
         </div>
@@ -206,7 +206,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl">
             <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
               <Package className="w-3.5 h-3.5 text-emerald-700" />
-              <span>মোট অর্ডার</span>
+              <span>{language === 'bn' ? 'মোট অর্ডার' : 'Total Orders'}</span>
             </p>
             <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono">
               {totalOrdersCount}
@@ -216,7 +216,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="bg-amber-50/60 border border-amber-200/80 p-3.5 rounded-2xl">
             <p className="text-[11px] font-semibold text-amber-700 flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-amber-600" />
-              <span>চলমান ডেলিভারি</span>
+              <span>{language === 'bn' ? 'চলমান ডেলিভারি' : 'Active Orders'}</span>
             </p>
             <p className="text-xl sm:text-2xl font-black text-amber-900 mt-1 font-mono">
               {activeOrders.length}
@@ -226,7 +226,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="bg-emerald-50/60 border border-emerald-200/80 p-3.5 rounded-2xl">
             <p className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>সফল ডেলিভারি</span>
+              <span>{language === 'bn' ? 'সফল ডেলিভারি' : 'Delivered'}</span>
             </p>
             <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-1 font-mono">
               {deliveredOrders.length}
@@ -236,7 +236,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl">
             <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
               <CreditCard className="w-3.5 h-3.5 text-slate-600" />
-              <span>মোট কেনাকাটা</span>
+              <span>{language === 'bn' ? 'মোট কেনাকাটা' : 'Total Spent'}</span>
             </p>
             <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono">
               {formatBDT(totalSpent)}
@@ -251,10 +251,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div>
             <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
               <Truck className="w-5 h-5 text-emerald-700" />
-              <span>আমার অর্ডার ট্র্যাকিং ও ইতিহাস</span>
+              <span>{language === 'bn' ? 'আমার অর্ডার ট্র্যাকিং ও ইতিহাস' : 'My Orders & Live Tracking'}</span>
             </h2>
             <p className="text-xs text-slate-500">
-              লাইভ ডেলিভারি স্ট্যাটাস এবং ক্যাশ মেমো রিসিট
+              {language === 'bn'
+                ? 'লাইভ ডেলিভারি স্ট্যাটাস এবং ক্যাশ মেমো রিসিট'
+                : 'Live delivery status updates and cash memo receipts'}
             </p>
           </div>
 
@@ -268,7 +270,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              সকল ({totalOrdersCount})
+              {language === 'bn' ? 'সকল' : 'All'} ({totalOrdersCount})
             </button>
             <button
               onClick={() => setFilterTab('active')}
@@ -278,7 +280,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              চলমান ({activeOrders.length})
+              {language === 'bn' ? 'চলমান' : 'Active'} ({activeOrders.length})
             </button>
             <button
               onClick={() => setFilterTab('delivered')}
@@ -288,7 +290,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              সম্পন্ন ({deliveredOrders.length})
+              {language === 'bn' ? 'সম্পন্ন' : 'Delivered'} ({deliveredOrders.length})
             </button>
           </div>
         </div>
@@ -297,12 +299,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         {displayedOrders.length === 0 ? (
           <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center text-slate-400">
             <Package className="w-12 h-12 text-slate-300 mx-auto mb-2 stroke-1" />
-            <p className="text-xs font-semibold">কোনো অর্ডার পাওয়া যায়নি।</p>
+            <p className="text-xs font-semibold">
+              {language === 'bn' ? 'কোনো অর্ডার পাওয়া যায়নি।' : 'No orders found.'}
+            </p>
             <button
               onClick={onBackToShop}
               className="mt-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shadow-sm"
             >
-              এখনই কেনাকাটা করুন
+              {language === 'bn' ? 'এখনই কেনাকাটা করুন' : 'Shop Now'}
             </button>
           </div>
         ) : (
@@ -329,7 +333,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       <span className="text-xs text-slate-500 flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         <span>
-                          {new Date(order.createdAt).toLocaleDateString('bn-BD')} •{' '}
+                          {new Date(order.createdAt).toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US')} •{' '}
                           {new Date(order.createdAt).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -355,10 +359,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                 : 'bg-slate-100 text-slate-400'
                             }`}
                           >
-                            ১
+                            {language === 'bn' ? '১' : '1'}
                           </div>
                           <span className="text-[10px] font-bold text-slate-700 mt-1">
-                            অর্ডার প্লেসড
+                            {language === 'bn' ? 'অর্ডার প্লেসড' : 'Placed'}
                           </span>
                         </div>
 
@@ -370,10 +374,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                 : 'bg-slate-100 text-slate-400'
                             }`}
                           >
-                            ২
+                            {language === 'bn' ? '২' : '2'}
                           </div>
                           <span className="text-[10px] font-bold text-slate-700 mt-1">
-                            কনফার্মড
+                            {language === 'bn' ? 'কনফার্মড' : 'Confirmed'}
                           </span>
                         </div>
 
@@ -385,10 +389,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                 : 'bg-slate-100 text-slate-400'
                             }`}
                           >
-                            ৩
+                            {language === 'bn' ? '৩' : '3'}
                           </div>
                           <span className="text-[10px] font-bold text-slate-700 mt-1">
-                            রাইডার পিকআপ
+                            {language === 'bn' ? 'রাইডার পিকআপ' : 'Picked Up'}
                           </span>
                         </div>
 
@@ -400,10 +404,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                 : 'bg-slate-100 text-slate-400'
                             }`}
                           >
-                            ৪
+                            {language === 'bn' ? '৪' : '4'}
                           </div>
                           <span className="text-[10px] font-bold text-slate-700 mt-1">
-                            ডেলিভারির পথে
+                            {language === 'bn' ? 'ডেলিভারির পথে' : 'On The Way'}
                           </span>
                         </div>
 
@@ -415,10 +419,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                 : 'bg-slate-100 text-slate-400'
                             }`}
                           >
-                            ৫
+                            {language === 'bn' ? '৫' : '5'}
                           </div>
                           <span className="text-[10px] font-bold text-slate-700 mt-1">
-                            ডেলিভার্ড
+                            {language === 'bn' ? 'ডেলিভার্ড' : 'Delivered'}
                           </span>
                         </div>
                       </div>
@@ -434,10 +438,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         </div>
                         <div>
                           <p className="font-bold text-emerald-950">
-                            ডেলিভারি রাইডার: {order.riderName}
+                            {language === 'bn' ? 'ডেলিভারি রাইডার: ' : 'Delivery Rider: '}{order.riderName}
                           </p>
                           <p className="text-[11px] text-emerald-800 font-mono">
-                            {order.riderPhone || 'রাইডার'}
+                            {order.riderPhone || (language === 'bn' ? 'রাইডার' : 'Rider')}
                           </p>
                         </div>
                       </div>
@@ -448,7 +452,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                           className="bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition-colors shadow-2xs flex items-center gap-1"
                         >
                           <Phone className="w-3 h-3" />
-                          <span>কল দিন</span>
+                          <span>{language === 'bn' ? 'কল দিন' : 'Call'}</span>
                         </a>
                       )}
                     </div>
@@ -456,12 +460,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                   {/* Order Items Summary */}
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-4">
-                    <p className="text-[11px] font-bold text-slate-500 mb-2">পণ্যের তালিকা:</p>
+                    <p className="text-[11px] font-bold text-slate-500 mb-2">
+                      {language === 'bn' ? 'পণ্যের তালিকা:' : 'Items Summary:'}
+                    </p>
                     <div className="divide-y divide-slate-200/70 text-xs">
                       {order.items.map((item, itemIdx) => (
                         <div key={`${item.productId}-${itemIdx}`} className="py-1.5 flex justify-between">
                           <span className="text-slate-800 font-medium">
-                            {item.nameBn} <span className="text-slate-400">({item.quantity} {item.unit})</span>
+                            {language === 'bn' ? item.nameBn : (item.nameEn || item.nameBn)} <span className="text-slate-400">({item.quantity} {item.unit})</span>
                           </span>
                           <span className="font-bold text-slate-900 font-mono">
                             {formatBDT(item.lineTotal)}
@@ -472,10 +478,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                     <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs mt-2">
                       <span className="text-slate-600">
-                        ডেলিভারি ফি: <strong className="text-slate-800">{formatBDT(order.deliveryFee)}</strong>
+                        {language === 'bn' ? 'ডেলিভারি ফি: ' : 'Delivery Fee: '}<strong className="text-slate-800">{formatBDT(order.deliveryFee)}</strong>
                       </span>
                       <span className="font-bold text-slate-900 text-sm">
-                        সর্বমোট (COD): <strong className="text-emerald-800">{formatBDT(order.totalAmount)}</strong>
+                        {language === 'bn' ? 'সর্বমোট (ক্যাশ অন ডেলিভারি): ' : 'Total (Cash on Delivery): '}<strong className="text-emerald-800">{formatBDT(order.totalAmount)}</strong>
                       </span>
                     </div>
                   </div>
@@ -507,7 +513,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         className="px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 flex items-center gap-1.5 shadow-2xs transition-colors"
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
-                        <span>মেসেজ ও চ্যাট</span>
+                        <span>{language === 'bn' ? 'মেসেজ ও চ্যাট' : 'Chat & Message'}</span>
                         {order.messages && order.messages.length > 0 && (
                           <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
                             {order.messages.length}
@@ -521,7 +527,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                           onClick={() => setCancellingOrderId(order.id)}
                           className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors"
                         >
-                          অর্ডার বাতিল
+                          {language === 'bn' ? 'অর্ডার বাতিল' : 'Cancel Order'}
                         </button>
                       )}
 
@@ -531,7 +537,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 shadow-2xs transition-colors"
                       >
                         <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>ক্যাশ মেমো দেখুন</span>
+                        <span>{language === 'bn' ? 'ক্যাশ মেমো দেখুন' : 'View Cash Memo'}</span>
                       </button>
                     </div>
                   </div>
@@ -540,13 +546,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   {cancellingOrderId === order.id && (
                     <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs space-y-2">
                       <p className="font-bold text-rose-900">
-                        অর্ডার #{order.id} বাতিলের কারণ লিখুন:
+                        {language === 'bn' ? `অর্ডার #${order.id} বাতিলের কারণ লিখুন:` : `Reason to cancel Order #${order.id}:`}
                       </p>
                       <input
                         type="text"
                         value={cancelReason}
                         onChange={(e) => setCancelReason(e.target.value)}
-                        placeholder="যেমন: ভুল পণ্য যোগ করেছিলাম"
+                        placeholder={language === 'bn' ? 'যেমন: ভুল পণ্য যোগ করেছিলাম' : 'e.g., Placed by mistake'}
                         className="w-full text-xs p-2 rounded-xl border border-rose-300 bg-white"
                       />
                       <div className="flex justify-end space-x-2 pt-1">
@@ -554,14 +560,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                           onClick={() => setCancellingOrderId(null)}
                           className="px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900 font-semibold"
                         >
-                          বন্ধ করুন
+                          {language === 'bn' ? 'বন্ধ করুন' : 'Close'}
                         </button>
                         <button
                           onClick={handleConfirmCancel}
                           disabled={isCancelling || !cancelReason.trim()}
                           className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-50"
                         >
-                          {isCancelling ? 'বাতিল হচ্ছে...' : 'বাতিল নিশ্চিত করুন'}
+                          {isCancelling
+                            ? (language === 'bn' ? 'বাতিল হচ্ছে...' : 'Cancelling...')
+                            : (language === 'bn' ? 'বাতিল নিশ্চিত করুন' : 'Confirm Cancel')}
                         </button>
                       </div>
                     </div>

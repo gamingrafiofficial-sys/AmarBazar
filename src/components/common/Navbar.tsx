@@ -61,8 +61,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="flex items-center space-x-2 cursor-pointer group"
               onClick={onGoHome}
             >
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-emerald-700 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-md group-hover:bg-emerald-800 transition-colors">
-                আ
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-emerald-700 text-white flex items-center justify-center font-black text-sm sm:text-base shadow-md group-hover:bg-emerald-800 transition-colors">
+                {language === 'bn' ? 'আ' : 'AB'}
               </div>
               <div className="hidden xs:block">
                 <span className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 flex items-center gap-1 leading-tight">

@@ -120,7 +120,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
           >
-            অর্ডার তালিকা ({uniqueOrders.length})
+            {language === 'bn' ? `অর্ডার তালিকা (${uniqueOrders.length})` : `Order List (${uniqueOrders.length})`}
           </button>
 
           {selectedMemoOrder && (
@@ -133,7 +133,11 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>ক্যাশ মেমো (#{selectedMemoOrder.id})</span>
+              <span>
+                {language === 'bn'
+                  ? `ক্যাশ মেমো (#${selectedMemoOrder.id})`
+                  : `Cash Memo (#${selectedMemoOrder.id})`}
+              </span>
             </button>
           )}
 
@@ -142,7 +146,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             className="flex items-center space-x-1 text-xs font-semibold text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>শপ</span>
+            <span>{language === 'bn' ? 'শপ' : 'Shop'}</span>
           </button>
         </div>
       </div>
@@ -151,16 +155,18 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-md mx-auto my-8">
           <Package className="w-16 h-16 text-slate-300 mx-auto mb-3 stroke-1" />
           <h3 className="font-bold text-slate-800 text-base mb-1">
-            আপনার কোনো অর্ডার হিস্ট্রি নেই
+            {language === 'bn' ? 'আপনার কোনো অর্ডার হিস্ট্রি নেই' : 'No Order History Yet'}
           </h3>
           <p className="text-xs text-slate-500 mb-6">
-            পণ্য পছন্দ করে অর্ডার করলে এখানে তার বিস্তারিত ও ক্যাশ মেমো দেখতে পাবেন।
+            {language === 'bn'
+              ? 'পণ্য পছন্দ করে অর্ডার করলে এখানে তার বিস্তারিত ও ক্যাশ মেমো দেখতে পাবেন।'
+              : 'Order your groceries and fresh items to track status and view receipts here.'}
           </p>
           <button
             onClick={onBackToShop}
             className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-6 rounded-2xl text-xs"
           >
-            কেনাকাটা শুরু করুন
+            {language === 'bn' ? 'কেনাকাটা শুরু করুন' : 'Start Shopping'}
           </button>
         </div>
       ) : activeTab === 'memo' && selectedMemoOrder ? (
@@ -173,7 +179,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               className="text-xs text-slate-600 hover:text-slate-900 font-bold flex items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>তালিকায় ফিরে যান</span>
+              <span>{language === 'bn' ? 'তালিকায় ফিরে যান' : 'Back to Order List'}</span>
             </button>
 
             <button
@@ -181,7 +187,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>মেমো প্রিন্ট / ডাউনলোড করুন</span>
+              <span>{language === 'bn' ? 'মেমো প্রিন্ট / ডাউনলোড করুন' : 'Print / Download Memo'}</span>
             </button>
           </div>
 
@@ -190,36 +196,38 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             {/* Memo Header */}
             <div className="text-center pb-4 border-b-2 border-slate-900 mb-4">
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                আমারবাজার (AmarBazaar)
+                {language === 'bn' ? 'আমারবাজার (AmarBazaar)' : 'AmarBazaar Express'}
               </h2>
               <p className="text-xs text-slate-600 font-medium">
-                কালীগঞ্জ ও কাপাসিয়া এক্সপ্রেস ডেলিভারি সার্ভিস, গাজীপুর
+                {language === 'bn'
+                  ? 'কালীগঞ্জ ও কাপাসিয়া এক্সপ্রেস ডেলিভারি সার্ভিস, গাজীপুর'
+                  : 'Kaliganj & Kapasia Express Delivery Service, Gazipur'}
               </p>
               <div className="inline-block bg-slate-900 text-white font-bold text-xs uppercase px-4 py-0.5 rounded-full mt-2">
-                অফিসিয়াল ক্যাশ মেমো / Cash Memo
+                {language === 'bn' ? 'অফিসিয়াল ক্যাশ মেমো / Cash Memo' : 'Official Cash Memo / Invoice'}
               </div>
             </div>
 
             {/* Memo Metadata */}
             <div className="grid grid-cols-2 gap-4 text-xs pb-4 border-b border-slate-200 mb-4">
               <div>
-                <p className="text-slate-500">ভাউচার নম্বর:</p>
+                <p className="text-slate-500">{language === 'bn' ? 'ভাউচার নম্বর:' : 'Voucher No:'}</p>
                 <p className="font-mono font-bold text-sm text-slate-900">
                   #{selectedMemoOrder.id}
                 </p>
-                <p className="text-slate-500 mt-1">তারিখ ও সময়:</p>
+                <p className="text-slate-500 mt-1">{language === 'bn' ? 'তারিখ ও সময়:' : 'Date & Time:'}</p>
                 <p className="font-semibold text-slate-800">
-                  {new Date(selectedMemoOrder.createdAt).toLocaleDateString('bn-BD')} •{' '}
+                  {new Date(selectedMemoOrder.createdAt).toLocaleDateString()} •{' '}
                   {new Date(selectedMemoOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
 
               <div className="text-right">
-                <p className="text-slate-500">গ্রাহকের নাম:</p>
+                <p className="text-slate-500">{language === 'bn' ? 'গ্রাহকের নাম:' : 'Customer Name:'}</p>
                 <p className="font-bold text-slate-900">{selectedMemoOrder.customerName}</p>
-                <p className="text-slate-500 mt-1">মোবাইল নম্বর:</p>
+                <p className="text-slate-500 mt-1">{language === 'bn' ? 'মোবাইল নম্বর:' : 'Mobile Number:'}</p>
                 <p className="font-mono font-bold text-slate-800">{selectedMemoOrder.customerPhone}</p>
-                <p className="text-slate-500 mt-1">ডেলিভারি ঠিকানা:</p>
+                <p className="text-slate-500 mt-1">{language === 'bn' ? 'ডেলিভারি ঠিকানা:' : 'Delivery Address:'}</p>
                 <p className="font-medium text-slate-700">{selectedMemoOrder.deliveryAddress}</p>
               </div>
             </div>
@@ -229,19 +237,19 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="border-b-2 border-slate-300 text-slate-800 font-bold bg-slate-50">
-                    <th className="py-2 px-2">ক্রম</th>
-                    <th className="py-2 px-2">পণ্যের বিবরণ</th>
-                    <th className="py-2 px-2 text-center">পরিমাণ</th>
-                    <th className="py-2 px-2 text-right">দর (৳)</th>
-                    <th className="py-2 px-2 text-right">মোট (৳)</th>
+                    <th className="py-2 px-2">#</th>
+                    <th className="py-2 px-2">{language === 'bn' ? 'পণ্যের বিবরণ' : 'Item Description'}</th>
+                    <th className="py-2 px-2 text-center">{language === 'bn' ? 'পরিমাণ' : 'Qty'}</th>
+                    <th className="py-2 px-2 text-right">{language === 'bn' ? 'দর (৳)' : 'Price (৳)'}</th>
+                    <th className="py-2 px-2 text-right">{language === 'bn' ? 'মোট (৳)' : 'Total (৳)'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {selectedMemoOrder.items.map((item, idx) => (
-                    <tr key={item.productId}>
+                    <tr key={`${item.productId}-${idx}`}>
                       <td className="py-2.5 px-2 text-slate-500">{idx + 1}</td>
                       <td className="py-2.5 px-2 font-semibold text-slate-900">
-                        {item.nameBn}
+                        {language === 'bn' ? item.nameBn : (item.nameEn || item.nameBn)}
                       </td>
                       <td className="py-2.5 px-2 text-center font-bold">
                         {item.quantity} {item.unit}
@@ -261,19 +269,21 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             {/* Calculations Breakdown */}
             <div className="border-t-2 border-slate-300 pt-3 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-700">
-                <span>পণ্যের মোট উপমোট (Subtotal):</span>
+                <span>{language === 'bn' ? 'পণ্যের মোট উপমোট (Subtotal):' : 'Items Subtotal:'}</span>
                 <span className="font-bold">{formatBDT(selectedMemoOrder.subtotal)}</span>
               </div>
               <div className="flex justify-between text-slate-700">
                 <span>
-                  সড়ক ডেলিভারি ফি ({selectedMemoOrder.roadDistanceKm} কি.মি):
+                  {language === 'bn'
+                    ? `সড়ক ডেলিভারি ফি (${selectedMemoOrder.roadDistanceKm} কি.মি):`
+                    : `Road Delivery Fee (${selectedMemoOrder.roadDistanceKm} km):`}
                 </span>
                 <span className="font-bold text-emerald-800">
                   {formatBDT(selectedMemoOrder.deliveryFee)}
                 </span>
               </div>
               <div className="flex justify-between text-sm sm:text-base font-black text-slate-900 border-t-2 border-slate-900 pt-2">
-                <span>সর্বমোট প্রদেয় (Cash to Pay):</span>
+                <span>{language === 'bn' ? 'সর্বমোট প্রদেয় (Cash to Pay):' : 'Total Payable (COD):'}</span>
                 <span className="text-emerald-900 font-black">
                   {formatBDT(selectedMemoOrder.totalAmount)}
                 </span>
@@ -283,19 +293,23 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
             {/* Delivery Rider & Payment Stamp */}
             <div className="mt-6 pt-4 border-t border-dashed border-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div>
-                <p className="text-slate-500 text-[11px]">ডেলিভারি রাইডার:</p>
+                <p className="text-slate-500 text-[11px]">{language === 'bn' ? 'ডেলিভারি রাইডার:' : 'Delivery Rider:'}</p>
                 {selectedMemoOrder.riderName ? (
                   <p className="font-bold text-slate-900 flex items-center gap-1">
                     <Bike className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>{selectedMemoOrder.riderName} ({selectedMemoOrder.riderPhone || 'রাইডার'})</span>
+                    <span>
+                      {selectedMemoOrder.riderName} ({selectedMemoOrder.riderPhone || (language === 'bn' ? 'রাইডার' : 'Rider')})
+                    </span>
                   </p>
                 ) : (
-                  <p className="text-amber-700 font-semibold italic">রাইডার নিযুক্তির অপেক্ষায়</p>
+                  <p className="text-amber-700 font-semibold italic">
+                    {language === 'bn' ? 'রাইডার নিযুক্তির অপেক্ষায়' : 'Awaiting Rider Assignment'}
+                  </p>
                 )}
               </div>
 
               <div className="border border-emerald-600 bg-emerald-50 text-emerald-900 px-3 py-1.5 rounded-xl font-bold text-center self-start sm:self-auto">
-                পেমেন্ট মাধ্যম: ক্যাশ অন ডেলিভারি (COD)
+                {language === 'bn' ? 'পেমেন্ট মাধ্যম: ক্যাশ অন ডেলিভারি (COD)' : 'Payment Method: Cash on Delivery (COD)'}
               </div>
             </div>
 
@@ -319,10 +333,10 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 className="w-full sm:w-auto px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors"
               >
                 <MessageSquare className="w-4 h-4 text-emerald-300" />
-                <span>রাইডার ও এডমিনকে মেসেজ পাঠান (Chat)</span>
+                <span>{language === 'bn' ? 'রাইডার ও এডমিনকে মেসেজ পাঠান (Chat)' : 'Chat with Rider & Support'}</span>
                 {selectedMemoOrder.messages && selectedMemoOrder.messages.length > 0 && (
                   <span className="bg-white text-emerald-900 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
-                    {selectedMemoOrder.messages.length}টি মেসেজ
+                    {selectedMemoOrder.messages.length} {language === 'bn' ? 'টি মেসেজ' : 'msgs'}
                   </span>
                 )}
               </button>
@@ -330,7 +344,9 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
 
             {/* Footer note */}
             <p className="text-[10px] text-center text-slate-400 mt-6 pt-2 border-t border-slate-100">
-              আমাদের সাথে কেনাকাটা করার জন্য ধন্যবাদ। প্রয়োজনে যোগাযোগ: 09612-BAZAAR (২৪/৭ হেল্পলাইন)
+              {language === 'bn'
+                ? 'আমাদের সাথে কেনাকাটা করার জন্য ধন্যবাদ। প্রয়োজনে যোগাযোগ: 09612-BAZAAR (২৪/৭ হেল্পলাইন)'
+                : 'Thank you for shopping with AmarBazaar. 24/7 Helpline: 09612-BAZAAR'}
             </p>
           </div>
         </div>
@@ -367,7 +383,9 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                     {formatBDT(order.totalAmount)}
                   </span>
                   <span className="text-[10px] text-slate-500 block">
-                    (পণ্য: {formatBDT(order.subtotal)} + ডেলিভারি: {formatBDT(order.deliveryFee)})
+                    {language === 'bn'
+                      ? `(পণ্য: ${formatBDT(order.subtotal)} + ডেলিভারি: ${formatBDT(order.deliveryFee)})`
+                      : `(Items: ${formatBDT(order.subtotal)} + Delivery: ${formatBDT(order.deliveryFee)})`}
                   </span>
                 </div>
               </div>
@@ -376,7 +394,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               <div className="py-3 text-xs text-slate-700 space-y-1">
                 {order.items.map((it, itemIdx) => (
                   <div key={`${it.productId}-${itemIdx}`} className="flex justify-between">
-                    <span>{it.nameBn} x {it.quantity} {it.unit}</span>
+                    <span>{language === 'bn' ? it.nameBn : (it.nameEn || it.nameBn)} x {it.quantity} {it.unit}</span>
                     <span className="font-semibold">{formatBDT(it.lineTotal)}</span>
                   </div>
                 ))}
@@ -390,13 +408,17 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                     <span>{order.deliveryAddress}</span>
                   </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    সড়ক দূরত্ব: {order.roadDistanceKm} কি.মি • {order.customerPhone}
+                    {language === 'bn'
+                      ? `সড়ক দূরত্ব: ${order.roadDistanceKm} কি.মি`
+                      : `Road Distance: ${order.roadDistanceKm} km`} • {order.customerPhone}
                   </p>
                 </div>
 
                 {order.riderName && (
                   <div className="text-left sm:text-right">
-                    <span className="text-[10px] text-slate-400 block">নিযুক্ত রাইডার:</span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {language === 'bn' ? 'নিযুক্ত রাইডার:' : 'Assigned Rider:'}
+                    </span>
                     <span className="font-bold text-emerald-800 flex items-center sm:justify-end gap-1">
                       <Bike className="w-3.5 h-3.5" />
                       <span>{order.riderName}</span>
@@ -428,7 +450,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                     className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
                   >
                     <FileText className="w-3.5 h-3.5 text-amber-400" />
-                    <span>ক্যাশ মেমো দেখুন</span>
+                    <span>{language === 'bn' ? 'ক্যাশ মেমো দেখুন' : 'View Cash Memo'}</span>
                   </button>
 
                   <button
@@ -437,7 +459,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                     className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-colors shadow-2xs"
                   >
                     <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>মেসেজ ও সহায়তা</span>
+                    <span>{language === 'bn' ? 'মেসেজ ও সহায়তা' : 'Support Chat'}</span>
                     {order.messages && order.messages.length > 0 && (
                       <span className="bg-emerald-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
                         {order.messages.length}
@@ -451,7 +473,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                     onClick={() => setCancelOrderId(order.id)}
                     className="text-xs text-rose-600 hover:text-rose-700 font-bold border border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-xl transition-colors"
                   >
-                    অর্ডার বাতিল করুন
+                    {language === 'bn' ? 'অর্ডার বাতিল করুন' : 'Cancel Order'}
                   </button>
                 )}
               </div>
@@ -459,12 +481,14 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
               {/* Cancel dialog */}
               {cancelOrderId === order.id && (
                 <div className="mt-3 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs space-y-2">
-                  <p className="font-bold text-rose-800">অর্ডার বাতিলের কারণ লিখুন:</p>
+                  <p className="font-bold text-rose-800">
+                    {language === 'bn' ? 'অর্ডার বাতিলের কারণ লিখুন:' : 'Reason for cancellation:'}
+                  </p>
                   <input
                     type="text"
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder="যেমন: ভুল পণ্য সিলেক্ট করেছিলাম"
+                    placeholder={language === 'bn' ? 'যেমন: ভুল পণ্য সিলেক্ট করেছিলাম' : 'e.g. Selected wrong item by mistake'}
                     className="w-full p-2 rounded-xl border border-rose-200 bg-white"
                   />
                   <div className="flex gap-2">
@@ -473,13 +497,15 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                       disabled={isCancelling || !cancelReason.trim()}
                       className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3.5 py-1.5 rounded-xl disabled:opacity-50"
                     >
-                      {isCancelling ? 'বাতিল হচ্ছে...' : 'বাতিল নিশ্চিত করুন'}
+                      {isCancelling
+                        ? (language === 'bn' ? 'বাতিল হচ্ছে...' : 'Cancelling...')
+                        : (language === 'bn' ? 'বাতিল নিশ্চিত করুন' : 'Confirm Cancel')}
                     </button>
                     <button
                       onClick={() => setCancelOrderId(null)}
                       className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-3 py-1.5 rounded-xl"
                     >
-                      বন্ধ
+                      {language === 'bn' ? 'বন্ধ' : 'Close'}
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 export type UserRole = 'customer' | 'shopkeeper' | 'rider' | 'admin';
 
-export type ProductUnit = 'kg' | 'gm' | 'litre' | 'ml' | 'piece' | 'dozen' | 'pack' | 'bundle';
+export type ProductUnit = 'kg' | 'gm' | 'litre' | 'liter' | 'ml' | 'piece' | 'dozen' | 'pack' | 'bundle' | 'bottle';
 
 export type OrderStatus =
   | 'pending_shop_confirmation'
@@ -130,6 +130,7 @@ export interface Product {
   id: string;
   shopId: string;
   marketId: string;
+  area?: string;
   categoryId: string;
   nameEn: string;
   nameBn: string;
@@ -139,6 +140,7 @@ export interface Product {
   unit: ProductUnit;
   stock: number;
   isAvailable: boolean;
+  isPrivate?: boolean;
   imageUrl?: string;
   createdAt: string;
   updatedAt: string;
