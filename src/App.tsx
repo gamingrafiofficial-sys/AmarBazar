@@ -27,6 +27,7 @@ import {
   toggleRiderActiveOnline,
   recordRiderHandoverOnline,
   fetchCustomerByPhoneOnline,
+  createRiderOnline,
   createProductOnline,
   updateProductOnline,
   deleteProductOnline,
@@ -51,6 +52,7 @@ import {
   UnionArea,
   OrderMessage,
 } from './types';
+import { normalizePhone } from './lib/phone';
 import { Search, MapPin, ArrowRight, ArrowLeft, ShoppingBag, Sparkles, Flame, X } from 'lucide-react';
 
 type PageView = 'catalog' | 'product_view' | 'cart' | 'orders' | 'login' | 'profile';
@@ -511,42 +513,51 @@ function MarketplaceMain() {
     }
   };
 
-  // Admin Registers New Delivery Rider
+  // Admin Registers New Delivery Rider (Persists to Firestore + Server + Local Storage)
   const handleRegisterRider = async (newRiderData: Omit<DeliveryRiderAccount, 'id' | 'createdAt'>) => {
+    const normPhone = normalizePhone(newRiderData.phone);
+    const riderId = `rider-${normPhone}`;
+    const rider: DeliveryRiderAccount = {
+      ...newRiderData,
+      id: riderId,
+      phone: normPhone,
+      password: (newRiderData.password || '123').trim(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isOnline: true,
+      isActive: true,
+    };
+
+    // 1. Optimistic UI update
+    setRegisteredRiders((prev) => [
+      rider,
+      ...prev.filter((r) => normalizePhone(r.phone) !== normPhone && r.id !== riderId),
+    ]);
+
+    // 2. Persist to localStorage immediately
     try {
-      const res = await fetch('/api/admin/riders/register', {
+      const current = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
+      const updated = [rider, ...current.filter((r: any) => normalizePhone(r.phone) !== normPhone)];
+      localStorage.setItem('amar_registered_riders', JSON.stringify(updated));
+    } catch {}
+
+    // 3. Persist to Firebase Firestore (Online Database)
+    try {
+      await createRiderOnline(rider);
+    } catch (err) {
+      console.warn('Error saving rider to Firestore:', err);
+    }
+
+    // 4. Persist to server API
+    try {
+      await fetch('/api/admin/riders/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRiderData),
+        body: JSON.stringify(rider),
       });
-      const data = await res.json();
-      if (res.ok && data.rider) {
-        setRegisteredRiders((prev) => [
-          data.rider,
-          ...prev.filter((r) => r.phone !== data.rider.phone && r.id !== data.rider.id),
-        ]);
-        try {
-          const current = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
-          const updated = [data.rider, ...current.filter((r: any) => r.phone !== data.rider.phone)];
-          localStorage.setItem('amar_registered_riders', JSON.stringify(updated));
-        } catch {}
-        return;
-      }
     } catch (err) {
       console.warn('Network error registering rider on server:', err);
     }
-
-    // Local fallback
-    const rider: DeliveryRiderAccount = {
-      ...newRiderData,
-      id: `rider-${Date.now().toString().slice(-4)}`,
-      createdAt: new Date().toISOString(),
-    };
-    setRegisteredRiders((prev) => [rider, ...prev]);
-    try {
-      const current = JSON.parse(localStorage.getItem('amar_registered_riders') || '[]');
-      localStorage.setItem('amar_registered_riders', JSON.stringify([rider, ...current]));
-    } catch {}
   };
 
   // Admin Updates Rider Assigned Unions

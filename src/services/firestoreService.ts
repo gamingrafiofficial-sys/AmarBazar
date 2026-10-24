@@ -199,10 +199,21 @@ export async function loginUnifiedOnline(identifier: string, password: string): 
 
   // B. Delivery Rider Check in Firestore
   try {
-    const riderQuery = query(collection(db, RIDERS_COL), where('phone', '==', normPhone));
-    const riderSnap = await getDocs(riderQuery);
-    if (!riderSnap.empty) {
-      const riderDoc = riderSnap.docs[0].data() as DeliveryRiderAccount;
+    let riderDoc: DeliveryRiderAccount | null = null;
+    // Check by direct doc ID first (e.g. rider-017XXXXXXXX)
+    const directDoc = await getDoc(doc(db, RIDERS_COL, `rider-${normPhone}`));
+    if (directDoc.exists()) {
+      riderDoc = directDoc.data() as DeliveryRiderAccount;
+    } else {
+      // Also query by phone field
+      const riderQuery = query(collection(db, RIDERS_COL), where('phone', '==', normPhone));
+      const riderSnap = await getDocs(riderQuery);
+      if (!riderSnap.empty) {
+        riderDoc = riderSnap.docs[0].data() as DeliveryRiderAccount;
+      }
+    }
+
+    if (riderDoc) {
       const expectedPass = (riderDoc.password || '123').trim();
       if (cleanPass === expectedPass || cleanPass === 'rider123' || cleanPass === '123') {
         return {
@@ -349,6 +360,23 @@ export function subscribeToRidersOnline(
       console.error('Firestore Realtime Riders Error:', error);
     }
   );
+}
+
+export async function createRiderOnline(rider: DeliveryRiderAccount): Promise<void> {
+  try {
+    const normPhone = normalizePhone(rider.phone);
+    const docId = rider.id || `rider-${normPhone}`;
+    const payload: DeliveryRiderAccount = {
+      ...rider,
+      id: docId,
+      phone: normPhone,
+      password: (rider.password || '123').trim(),
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, RIDERS_COL, docId), payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${RIDERS_COL}/${rider.id}`);
+  }
 }
 
 export async function toggleRiderActiveOnline(

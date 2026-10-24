@@ -51,7 +51,7 @@ import { db } from './src/lib/firebase';
 import { db as sqlDb } from './src/db/index.ts';
 import * as sqlSchema from './src/db/schema.ts';
 import { eq } from 'drizzle-orm';
-import { doc, setDoc, getDocs, collection, query, where } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 export { normalizePhone };
 
 // Helper: Load persistent database if exists
@@ -280,11 +280,17 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (!matchingRider) {
       try {
-        const qRider = query(collection(db, 'riders'), where('phone', '==', normalizedId));
-        const rSnap = await getDocs(qRider);
-        if (!rSnap.empty) {
-          matchingRider = rSnap.docs[0].data() as DeliveryRiderAccount;
+        const directDoc = await getDoc(doc(db, 'riders', `rider-${normalizedId}`));
+        if (directDoc.exists()) {
+          matchingRider = directDoc.data() as DeliveryRiderAccount;
           inMemoryDB.riders.unshift(matchingRider);
+        } else {
+          const qRider = query(collection(db, 'riders'), where('phone', '==', normalizedId));
+          const rSnap = await getDocs(qRider);
+          if (!rSnap.empty) {
+            matchingRider = rSnap.docs[0].data() as DeliveryRiderAccount;
+            inMemoryDB.riders.unshift(matchingRider);
+          }
         }
       } catch (e) {}
     }
@@ -851,7 +857,7 @@ app.get('/api/admin/riders', (req, res) => {
 });
 
 // Admin: Register Delivery Rider (with Assigned Unions)
-app.post('/api/admin/riders/register', (req, res) => {
+app.post('/api/admin/riders/register', async (req, res) => {
   try {
     const { name, phone, password, area, thanaId, assignedUnionIds } = req.body;
 
@@ -860,16 +866,10 @@ app.post('/api/admin/riders/register', (req, res) => {
     }
 
     const cleanPhone = normalizePhone(phone);
-    const alreadyExists = inMemoryDB.riders.some(
-      (r) => normalizePhone(r.phone) === cleanPhone
-    );
-
-    if (alreadyExists) {
-      return res.status(409).json({ error: 'এই নম্বরে ইতিমধ্যে একজন রাইডার রেজিস্টার করা আছে।' });
-    }
+    const riderId = `rider-${cleanPhone}`;
 
     const newRider: DeliveryRiderAccount = {
-      id: `rider-${Date.now().toString().slice(-4)}`,
+      id: riderId,
       name: name.trim(),
       phone: cleanPhone,
       password: (password || '123').trim(),
@@ -881,8 +881,18 @@ app.post('/api/admin/riders/register', (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
+    inMemoryDB.riders = inMemoryDB.riders.filter(
+      (r) => normalizePhone(r.phone) !== cleanPhone
+    );
     inMemoryDB.riders.unshift(newRider);
     savePersistentStore();
+
+    // Persist to Firestore directly
+    try {
+      await setDoc(doc(db, 'riders', riderId), newRider, { merge: true });
+    } catch (fireErr) {
+      console.warn('Firestore rider write error (non-blocking):', fireErr);
+    }
 
     res.status(201).json({ success: true, rider: newRider });
   } catch (err: any) {

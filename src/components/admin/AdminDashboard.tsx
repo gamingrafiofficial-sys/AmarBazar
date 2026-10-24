@@ -13,6 +13,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { OrderChatModal } from '../common/OrderChatModal';
 import { OrderNoteSection } from '../common/OrderNoteSection';
 import { SEED_UNIONS } from '../../data/seedData';
+import { normalizePhone } from '../../lib/phone';
 import {
   ShieldAlert,
   Package,
@@ -380,9 +381,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ? riderSelectedUnions
         : unionsForRiderThana.map((u) => u.id);
 
+    const cleanPhone = normalizePhone(riderPhone) || riderPhone.trim();
+
     const newRiderPayload = {
       name: riderName.trim(),
-      phone: riderPhone.trim(),
+      phone: cleanPhone,
       password: riderPassword.trim(),
       area: riderThana,
       thanaId: riderThana,

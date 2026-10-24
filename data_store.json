@@ -153,6 +153,20 @@
   ],
   "riders": [
     {
+      "id": "rider-01812345678",
+      "name": "Test Rider",
+      "phone": "01812345678",
+      "password": "riderpass123",
+      "area": "kaliganj",
+      "thanaId": "kaliganj",
+      "assignedUnionIds": [
+        "tumulia"
+      ],
+      "isOnline": true,
+      "isActive": true,
+      "createdAt": "2026-10-24T07:23:27.180Z"
+    },
+    {
       "id": "rider-3656",
       "name": "মোঃ সুজন আহমেদ",
       "phone": "01755667788",

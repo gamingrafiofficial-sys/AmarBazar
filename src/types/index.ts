@@ -65,6 +65,7 @@ export interface DeliveryRiderAccount {
   completedDeliveries?: number;
   pendingDeliveries?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface UserProfile {
