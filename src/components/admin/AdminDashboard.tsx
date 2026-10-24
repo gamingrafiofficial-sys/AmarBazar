@@ -52,6 +52,9 @@ import {
   Crown,
   DollarSign,
   Calendar,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpRight,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -130,6 +133,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [summaryTimeFilter, setSummaryTimeFilter] = useState<'today' | 'month' | 'all'>('all');
   const [topProductSearch, setTopProductSearch] = useState('');
   const [topCustomerSearch, setTopCustomerSearch] = useState('');
+
+  // Summary Detail Drilldown Modal State (যখন কোনো মেট্রিক কার্ডে ক্লিক করা হবে)
+  const [summaryDetailType, setSummaryDetailType] = useState<
+    'total_orders' | 'total_delivered' | 'total_pending' | 'total_cancelled' | 'rider_balance' | 'office_deposit' | 'total_sale' | null
+  >(null);
+  const [summaryDetailSearch, setSummaryDetailSearch] = useState('');
+  const [expandedRiderId, setExpandedRiderId] = useState<string | null>(null);
 
   // Search & Filter in all orders
   const [orderSearch, setOrderSearch] = useState('');
@@ -497,6 +507,186 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         c.union.toLowerCase().includes(q)
     );
   }, [filteredSummaryOrders, topCustomerSearch]);
+
+  // Breakdown of riders with cash balance in hand (ক্যাশ সংগ্রহ করেছে কিন্তু এখনো অফিসে জমা দেয়নি)
+  const riderBalanceBreakdown = React.useMemo(() => {
+    const collectedOrders = filteredSummaryOrders.filter(
+      (o) => o.paymentStatus === 'collected'
+    );
+    const riderMap = new Map<
+      string,
+      {
+        riderId: string;
+        riderName: string;
+        riderPhone: string;
+        thana: string;
+        unions: string[];
+        totalBalance: number;
+        orders: Order[];
+      }
+    >();
+
+    // Seed with registered riders
+    registeredRiders.forEach((r) => {
+      riderMap.set(r.id, {
+        riderId: r.id,
+        riderName: r.name,
+        riderPhone: r.phone,
+        thana: r.area || r.thanaId || '',
+        unions: r.assignedUnionIds || [],
+        totalBalance: 0,
+        orders: [],
+      });
+    });
+
+    collectedOrders.forEach((o) => {
+      const rid = o.riderId || 'unassigned';
+      let entry = riderMap.get(rid);
+      if (!entry) {
+        entry = {
+          riderId: rid,
+          riderName: o.riderName || 'অজানা বা অনির্ধারিত রাইডার',
+          riderPhone: o.riderPhone || '',
+          thana: o.thanaNameBn || o.marketId || '',
+          unions: o.unionNameBn ? [o.unionNameBn] : [],
+          totalBalance: 0,
+          orders: [],
+        };
+        riderMap.set(rid, entry);
+      }
+      entry.totalBalance += Number(o.totalAmount) || 0;
+      entry.orders.push(o);
+    });
+
+    const list = Array.from(riderMap.values()).filter((r) => r.totalBalance > 0);
+    list.sort((a, b) => b.totalBalance - a.totalBalance);
+
+    if (!summaryDetailSearch.trim()) return list;
+    const q = summaryDetailSearch.toLowerCase().trim();
+    return list.filter(
+      (r) =>
+        r.riderName.toLowerCase().includes(q) ||
+        r.riderPhone.includes(q) ||
+        r.thana.toLowerCase().includes(q) ||
+        r.orders.some(
+          (o) =>
+            o.id.toLowerCase().includes(q) ||
+            o.customerName.toLowerCase().includes(q) ||
+            o.customerPhone.includes(q)
+        )
+    );
+  }, [filteredSummaryOrders, registeredRiders, summaryDetailSearch]);
+
+  // Breakdown of riders who deposited money to office (রাইডার অফিসে টাকা জমা দিছে)
+  const officeDepositBreakdown = React.useMemo(() => {
+    const depositedOrders = filteredSummaryOrders.filter(
+      (o) => o.paymentStatus === 'deposited'
+    );
+    const riderMap = new Map<
+      string,
+      {
+        riderId: string;
+        riderName: string;
+        riderPhone: string;
+        thana: string;
+        unions: string[];
+        totalDeposited: number;
+        orders: Order[];
+      }
+    >();
+
+    registeredRiders.forEach((r) => {
+      riderMap.set(r.id, {
+        riderId: r.id,
+        riderName: r.name,
+        riderPhone: r.phone,
+        thana: r.area || r.thanaId || '',
+        unions: r.assignedUnionIds || [],
+        totalDeposited: 0,
+        orders: [],
+      });
+    });
+
+    depositedOrders.forEach((o) => {
+      const rid = o.riderId || 'unassigned';
+      let entry = riderMap.get(rid);
+      if (!entry) {
+        entry = {
+          riderId: rid,
+          riderName: o.riderName || 'অজানা বা অনির্ধারিত রাইডার',
+          riderPhone: o.riderPhone || '',
+          thana: o.thanaNameBn || o.marketId || '',
+          unions: o.unionNameBn ? [o.unionNameBn] : [],
+          totalDeposited: 0,
+          orders: [],
+        };
+        riderMap.set(rid, entry);
+      }
+      entry.totalDeposited += Number(o.totalAmount) || 0;
+      entry.orders.push(o);
+    });
+
+    const list = Array.from(riderMap.values()).filter((r) => r.totalDeposited > 0);
+    list.sort((a, b) => b.totalDeposited - a.totalDeposited);
+
+    if (!summaryDetailSearch.trim()) return list;
+    const q = summaryDetailSearch.toLowerCase().trim();
+    return list.filter(
+      (r) =>
+        r.riderName.toLowerCase().includes(q) ||
+        r.riderPhone.includes(q) ||
+        r.thana.toLowerCase().includes(q) ||
+        r.orders.some(
+          (o) =>
+            o.id.toLowerCase().includes(q) ||
+            o.customerName.toLowerCase().includes(q) ||
+            o.customerPhone.includes(q)
+        )
+    );
+  }, [filteredSummaryOrders, registeredRiders, summaryDetailSearch]);
+
+  // Filtered orders for detail modal (Total Order, Delivery, Pending, Cancelled, Total Sale)
+  const detailModalOrders = React.useMemo(() => {
+    if (!summaryDetailType) return [];
+    let baseOrders: Order[] = [];
+
+    if (summaryDetailType === 'total_orders') {
+      baseOrders = filteredSummaryOrders;
+    } else if (summaryDetailType === 'total_delivered') {
+      baseOrders = filteredSummaryOrders.filter((o) => o.orderStatus === 'delivered');
+    } else if (summaryDetailType === 'total_pending') {
+      baseOrders = filteredSummaryOrders.filter((o) =>
+        ['pending', 'confirmed', 'processing', 'rider_assigned', 'picked_up', 'out_for_delivery'].includes(
+          o.orderStatus
+        )
+      );
+    } else if (summaryDetailType === 'total_cancelled') {
+      baseOrders = filteredSummaryOrders.filter(
+        (o) => o.orderStatus === 'cancelled' || o.orderStatus === 'returned'
+      );
+    } else if (summaryDetailType === 'total_sale') {
+      baseOrders = filteredSummaryOrders.filter((o) => o.orderStatus === 'delivered');
+    }
+
+    // Sort by date descending
+    const sorted = [...baseOrders].sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    if (!summaryDetailSearch.trim()) return sorted;
+    const q = summaryDetailSearch.toLowerCase().trim();
+    return sorted.filter(
+      (o) =>
+        o.id.toLowerCase().includes(q) ||
+        o.customerName.toLowerCase().includes(q) ||
+        o.customerPhone.includes(q) ||
+        (o.riderName && o.riderName.toLowerCase().includes(q)) ||
+        (o.riderPhone && o.riderPhone.includes(q)) ||
+        o.deliveryAddress.toLowerCase().includes(q) ||
+        (o.unionNameBn && o.unionNameBn.toLowerCase().includes(q)) ||
+        (o.thanaNameBn && o.thanaNameBn.toLowerCase().includes(q))
+    );
+  }, [summaryDetailType, filteredSummaryOrders, summaryDetailSearch]);
 
   const handleProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -866,148 +1056,745 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* 7 KEY KPI OVERVIEW CARDS */}
+          {/* 7 KEY KPI OVERVIEW CARDS (CLICKABLE FOR FULL DETAILS) */}
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
             {/* 1. Total Order */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('total_orders');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                   {language === 'bn' ? 'সর্বমোট অর্ডার' : 'Total Order'}
                 </span>
-                <span className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                <span className="p-2 rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                   <Package className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-xl sm:text-2xl font-black text-slate-900">
                   {summaryMetrics.totalOrders}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5">
                   {language === 'bn' ? 'মোট প্রাপ্ত অর্ডার' : 'Total orders placed'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold text-blue-600">
+                  <span>{language === 'bn' ? 'বিস্তারিত দেখুন' : 'View Details'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 2. Total Delivery */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-emerald-200/80 bg-emerald-50/20 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('total_delivered');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-emerald-200/80 bg-emerald-50/20 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
                   {language === 'bn' ? 'মোট ডেলিভারি' : 'Total Delivery'}
                 </span>
-                <span className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                <span className="p-2 rounded-xl bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                   <CheckCircle className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-xl sm:text-2xl font-black text-emerald-800">
                   {summaryMetrics.totalDelivered}
                 </div>
                 <div className="text-[10px] text-emerald-600 mt-0.5">
                   {language === 'bn' ? 'ডেলিভারি সম্পন্ন' : 'Delivered successfully'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-emerald-100 flex items-center justify-between text-[10px] font-bold text-emerald-700">
+                  <span>{language === 'bn' ? 'ডেলিভারি ডাটা' : 'View Deliveries'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 3. Total Pending */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-amber-200/80 bg-amber-50/20 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('total_pending');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-amber-200/80 bg-amber-50/20 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
                   {language === 'bn' ? 'পেন্ডিং অর্ডার' : 'Total Pending'}
                 </span>
-                <span className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                <span className="p-2 rounded-xl bg-amber-100 text-amber-700 group-hover:bg-amber-600 group-hover:text-white transition-colors">
                   <Clock className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-xl sm:text-2xl font-black text-amber-800">
                   {summaryMetrics.totalPending}
                 </div>
                 <div className="text-[10px] text-amber-600 mt-0.5">
                   {language === 'bn' ? 'চলমান ও অপেক্ষমান' : 'Active & in transit'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-amber-100 flex items-center justify-between text-[10px] font-bold text-amber-700">
+                  <span>{language === 'bn' ? 'পেন্ডিং তালিকা' : 'View Pending'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 4. Total Cancelled */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-rose-200/80 bg-rose-50/20 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('total_cancelled');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-rose-200/80 bg-rose-50/20 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-400"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">
                   {language === 'bn' ? 'বাতিলকৃত' : 'Total Cancelled'}
                 </span>
-                <span className="p-2 rounded-xl bg-rose-100 text-rose-700">
+                <span className="p-2 rounded-xl bg-rose-100 text-rose-700 group-hover:bg-rose-600 group-hover:text-white transition-colors">
                   <AlertCircle className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-xl sm:text-2xl font-black text-rose-800">
                   {summaryMetrics.totalCancelled}
                 </div>
                 <div className="text-[10px] text-rose-600 mt-0.5">
                   {language === 'bn' ? 'বাতিল বা ফেরতকৃত' : 'Cancelled or returned'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-rose-100 flex items-center justify-between text-[10px] font-bold text-rose-700">
+                  <span>{language === 'bn' ? 'বাতিল তালিকা' : 'View Cancelled'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 5. Total Balance (যেটা রাইডারের কাছে আছে) */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-amber-300 bg-amber-500/10 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('rider_balance');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-amber-300 bg-amber-500/10 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-black text-amber-900 uppercase tracking-wider">
                   {language === 'bn' ? 'রাইডার ব্যালেন্স' : 'Rider Balance'}
                 </span>
-                <span className="p-2 rounded-xl bg-amber-200 text-amber-900">
+                <span className="p-2 rounded-xl bg-amber-200 text-amber-900 group-hover:bg-amber-600 group-hover:text-white transition-colors">
                   <Wallet className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-lg sm:text-xl font-black text-amber-950">
                   {formatBDT(summaryMetrics.totalBalanceRider)}
                 </div>
                 <div className="text-[10px] text-amber-800 font-medium mt-0.5">
                   {language === 'bn' ? 'রাইডারের হাতে বকেয়া' : 'Pending with riders'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-amber-200/80 flex items-center justify-between text-[10px] font-bold text-amber-900">
+                  <span>{language === 'bn' ? 'রাইডার তালিকা' : 'View Riders'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 6. Total Cash (যেটা রাইডার অফিসে জমা দিয়েছে) */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-sky-300 bg-sky-500/10 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('office_deposit');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-sky-300 bg-sky-500/10 shadow-xs flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-400"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-black text-sky-900 uppercase tracking-wider">
                   {language === 'bn' ? 'অফিস ক্যাশ জমা' : 'Office Deposited'}
                 </span>
-                <span className="p-2 rounded-xl bg-sky-200 text-sky-900">
+                <span className="p-2 rounded-xl bg-sky-200 text-sky-900 group-hover:bg-sky-600 group-hover:text-white transition-colors">
                   <Banknote className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-lg sm:text-xl font-black text-sky-950">
                   {formatBDT(summaryMetrics.totalCashOffice)}
                 </div>
                 <div className="text-[10px] text-sky-800 font-medium mt-0.5">
                   {language === 'bn' ? 'অফিসে জমা প্রাপ্ত ক্যাশ' : 'Deposited to office'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-sky-200/80 flex items-center justify-between text-[10px] font-bold text-sky-900">
+                  <span>{language === 'bn' ? 'কে কে জমা দিছে' : 'View Deposited'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 7. Total Sale (কত টাকার প্রোডাক্ট বিক্রি হয়েছে) */}
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-emerald-400 bg-emerald-600 text-white shadow-md flex flex-col justify-between hover:shadow-lg transition-shadow">
-              <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryDetailType('total_sale');
+                setSummaryDetailSearch('');
+                setExpandedRiderId(null);
+              }}
+              className="text-left w-full bg-white rounded-3xl p-4 sm:p-5 border border-emerald-400 bg-emerald-600 text-white shadow-md flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] transition-all group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-300"
+            >
+              <div className="flex items-center justify-between mb-2 w-full">
                 <span className="text-[11px] font-black text-emerald-100 uppercase tracking-wider">
                   {language === 'bn' ? 'মোট বিক্রয় (সেল)' : 'Total Sale'}
                 </span>
-                <span className="p-2 rounded-xl bg-white/20 text-white">
+                <span className="p-2 rounded-xl bg-white/20 text-white group-hover:bg-white group-hover:text-emerald-700 transition-colors">
                   <TrendingUp className="w-4 h-4" />
                 </span>
               </div>
-              <div>
+              <div className="w-full">
                 <div className="text-lg sm:text-xl font-black text-white">
                   {formatBDT(summaryMetrics.totalSale)}
                 </div>
                 <div className="text-[10px] text-emerald-100 font-medium mt-0.5">
                   {language === 'bn' ? 'মোট ডেলিভারি বিক্রয়' : 'Delivered sales revenue'}
                 </div>
+                <div className="mt-2.5 pt-2 border-t border-emerald-500 flex items-center justify-between text-[10px] font-bold text-white">
+                  <span>{language === 'bn' ? 'সেলস ডাটা' : 'View Sales'}</span>
+                  <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* SUMMARY DRILLDOWN DETAIL MODAL */}
+          {summaryDetailType && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/60 backdrop-blur-xs">
+              <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                {/* Modal Header */}
+                <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <span className="p-2.5 rounded-2xl bg-white border border-slate-200 shadow-2xs shrink-0">
+                      {summaryDetailType === 'total_orders' && <Package className="w-5 h-5 text-blue-600" />}
+                      {summaryDetailType === 'total_delivered' && <CheckCircle className="w-5 h-5 text-emerald-600" />}
+                      {summaryDetailType === 'total_pending' && <Clock className="w-5 h-5 text-amber-600" />}
+                      {summaryDetailType === 'total_cancelled' && <AlertCircle className="w-5 h-5 text-rose-600" />}
+                      {summaryDetailType === 'rider_balance' && <Wallet className="w-5 h-5 text-amber-700" />}
+                      {summaryDetailType === 'office_deposit' && <Banknote className="w-5 h-5 text-sky-700" />}
+                      {summaryDetailType === 'total_sale' && <TrendingUp className="w-5 h-5 text-emerald-700" />}
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 truncate">
+                        {summaryDetailType === 'total_orders' &&
+                          (language === 'bn' ? 'সকল অর্ডার তালিকা (Total Orders)' : 'All Orders Details')}
+                        {summaryDetailType === 'total_delivered' &&
+                          (language === 'bn' ? 'মোট ডেলিভারি সম্পন্ন অর্ডারসমূহ (Delivered Orders)' : 'Delivered Orders Details')}
+                        {summaryDetailType === 'total_pending' &&
+                          (language === 'bn' ? 'পেন্ডিং ও চলমান অর্ডারসমূহ (Pending Orders)' : 'Pending Orders Details')}
+                        {summaryDetailType === 'total_cancelled' &&
+                          (language === 'bn' ? 'বাতিলকৃত অর্ডারসমূহ (Cancelled Orders)' : 'Cancelled Orders Details')}
+                        {summaryDetailType === 'rider_balance' &&
+                          (language === 'bn' ? 'রাইডারদের বকেয়া ব্যালেন্স (Rider Balances in Hand)' : 'Rider Cash Balances')}
+                        {summaryDetailType === 'office_deposit' &&
+                          (language === 'bn' ? 'অফিসে ক্যাশ জমা দেওয়া রাইডার তালিকা (Office Deposited)' : 'Office Cash Deposits')}
+                        {summaryDetailType === 'total_sale' &&
+                          (language === 'bn' ? 'মোট বিক্রয় ও ডেলিভারি বিবরণ (Sales Revenue Breakdown)' : 'Sales Revenue Details')}
+                      </h3>
+                      <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span>
+                          {language === 'bn' ? 'ফিল্টার:' : 'Filter:'}{' '}
+                          <strong className="text-slate-700">
+                            {summaryTimeFilter === 'today'
+                              ? language === 'bn'
+                                ? 'আজকের হিসাব'
+                                : 'Today'
+                              : summaryTimeFilter === 'month'
+                              ? language === 'bn'
+                                ? 'এই মাসের হিসাব'
+                                : 'This Month'
+                              : language === 'bn'
+                              ? 'লাইফটাইম হিসাব'
+                              : 'Lifetime'}
+                          </strong>
+                        </span>
+                        <span>•</span>
+                        <span className="font-bold text-emerald-700">
+                          {summaryDetailType === 'rider_balance'
+                            ? `${riderBalanceBreakdown.length} জন রাইডার | মোট বকেয়া ৳${summaryMetrics.totalBalanceRider}`
+                            : summaryDetailType === 'office_deposit'
+                            ? `${officeDepositBreakdown.length} জন রাইডার | মোট জমা ৳${summaryMetrics.totalCashOffice}`
+                            : `${detailModalOrders.length} টি অর্ডার | সর্বমোট মূল্য ৳${detailModalOrders.reduce(
+                                (sum, o) => sum + (Number(o.totalAmount) || 0),
+                                0
+                              )}`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSummaryDetailType(null);
+                      setSummaryDetailSearch('');
+                      setExpandedRiderId(null);
+                    }}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+                    title="বন্ধ করুন"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Search Bar */}
+                <div className="p-3 sm:p-4 border-b border-slate-100 bg-white">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={summaryDetailSearch}
+                      onChange={(e) => setSummaryDetailSearch(e.target.value)}
+                      placeholder={
+                        summaryDetailType === 'rider_balance' || summaryDetailType === 'office_deposit'
+                          ? language === 'bn'
+                            ? 'রাইডারের নাম, ফোন নম্বর, বা অর্ডার দিয়ে খুঁজুন...'
+                            : 'Search riders by name, phone or order...'
+                          : language === 'bn'
+                          ? 'অর্ডার আইডি, কাস্টমার, রাইডার, ফোন বা ঠিকানা দিয়ে খুঁজুন...'
+                          : 'Search orders by ID, customer, rider, phone, or address...'
+                      }
+                      className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    {summaryDetailSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setSummaryDetailSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 bg-slate-50/50 flex-1">
+                  {/* TYPE A: Rider Balance Breakdown */}
+                  {summaryDetailType === 'rider_balance' &&
+                    (riderBalanceBreakdown.length === 0 ? (
+                      <div className="text-center py-12 text-slate-400 text-xs bg-white rounded-3xl border border-slate-200">
+                        {language === 'bn'
+                          ? 'বর্তমানে কোনো রাইডারের কাছে বকেয়া ক্যাশ ব্যালেন্স নেই।'
+                          : 'No riders currently have outstanding cash balance.'}
+                      </div>
+                    ) : (
+                      riderBalanceBreakdown.map((rider, idx) => {
+                        const isExpanded = expandedRiderId === rider.riderId;
+                        return (
+                          <div
+                            key={`rb-rider-${rider.riderId}-${idx}`}
+                            className="bg-white rounded-2xl border border-amber-200 shadow-xs p-4 overflow-hidden transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-black text-sm shrink-0">
+                                  <Bike className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <h4 className="text-sm font-bold text-slate-900">{rider.riderName}</h4>
+                                    <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      বকেয়া ক্যাশ
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-2 text-xs text-slate-500 mt-0.5">
+                                    <a
+                                      href={`tel:${rider.riderPhone}`}
+                                      className="text-emerald-700 hover:underline font-mono font-medium flex items-center space-x-1"
+                                    >
+                                      <Phone className="w-3 h-3" />
+                                      <span>{rider.riderPhone}</span>
+                                    </a>
+                                    <span>•</span>
+                                    <span>{rider.thana || 'কালীগঞ্জ/কাপাসিয়া'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                                <div className="text-right">
+                                  <div className="text-base font-black text-amber-900">
+                                    {formatBDT(rider.totalBalance)}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 font-semibold">
+                                    {rider.orders.length} টি অর্ডারে সংগৃহীত
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedRiderId(isExpanded ? null : rider.riderId)}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 flex items-center space-x-1"
+                                >
+                                  <span>{isExpanded ? 'অর্ডার লুকান' : 'অর্ডার দেখুন'}</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded Orders List for this Rider */}
+                            {isExpanded && (
+                              <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 bg-amber-50/30 -mx-4 -mb-4 p-4">
+                                <div className="text-xs font-bold text-slate-700 mb-2">
+                                  এই রাইডারের সংগৃহীত ক্যাশ অর্ডারের তালিকা:
+                                </div>
+                                {rider.orders.map((ord, oIdx) => (
+                                  <div
+                                    key={`ord-sub-${ord.id}-${oIdx}`}
+                                    className="bg-white p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                                  >
+                                    <div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-mono font-bold text-slate-900">#{ord.id}</span>
+                                        <span className="text-[10px] text-slate-500">
+                                          {new Date(ord.createdAt).toLocaleDateString('bn-BD', {
+                                            day: 'numeric',
+                                            month: 'short',
+                                            year: 'numeric',
+                                          })}
+                                        </span>
+                                        <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 rounded-md">
+                                          ক্যাশ সংগ্রহ হয়েছে (অফিসে জমা হয়নি)
+                                        </span>
+                                      </div>
+                                      <div className="text-slate-600 mt-1">
+                                        গ্রাহক:{' '}
+                                        <strong className="text-slate-800">{ord.customerName}</strong> (
+                                        {ord.customerPhone})
+                                      </div>
+                                      <div className="text-slate-500 text-[11px]">
+                                        ঠিকানা: {ord.deliveryAddress}{' '}
+                                        {ord.unionNameBn ? `• ${ord.unionNameBn}` : ''}
+                                      </div>
+                                    </div>
+                                    <div className="text-right sm:self-center font-black text-amber-950 text-sm">
+                                      {formatBDT(ord.totalAmount)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ))}
+
+                  {/* TYPE B: Office Deposit Breakdown */}
+                  {summaryDetailType === 'office_deposit' &&
+                    (officeDepositBreakdown.length === 0 ? (
+                      <div className="text-center py-12 text-slate-400 text-xs bg-white rounded-3xl border border-slate-200">
+                        {language === 'bn'
+                          ? 'এই সময়ে অফিসে কোনো রাইডারের ক্যাশ জমা পাওয়া যায়নি।'
+                          : 'No rider cash deposits recorded for this period.'}
+                      </div>
+                    ) : (
+                      officeDepositBreakdown.map((rider, idx) => {
+                        const isExpanded = expandedRiderId === rider.riderId;
+                        return (
+                          <div
+                            key={`od-rider-${rider.riderId}-${idx}`}
+                            className="bg-white rounded-2xl border border-sky-200 shadow-xs p-4 overflow-hidden transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-900 flex items-center justify-center font-black text-sm shrink-0">
+                                  <Banknote className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <h4 className="text-sm font-bold text-slate-900">{rider.riderName}</h4>
+                                    <span className="bg-sky-100 text-sky-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                      অফিসে জমা দিয়েছে
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-2 text-xs text-slate-500 mt-0.5">
+                                    <a
+                                      href={`tel:${rider.riderPhone}`}
+                                      className="text-emerald-700 hover:underline font-mono font-medium flex items-center space-x-1"
+                                    >
+                                      <Phone className="w-3 h-3" />
+                                      <span>{rider.riderPhone}</span>
+                                    </a>
+                                    <span>•</span>
+                                    <span>{rider.thana || 'কালীগঞ্জ/কাপাসিয়া'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                                <div className="text-right">
+                                  <div className="text-base font-black text-sky-950">
+                                    {formatBDT(rider.totalDeposited)}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 font-semibold">
+                                    {rider.orders.length} টি অর্ডারের টাকা জমা হয়েছে
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedRiderId(isExpanded ? null : rider.riderId)}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200 flex items-center space-x-1"
+                                >
+                                  <span>{isExpanded ? 'অর্ডার লুকান' : 'অর্ডার দেখুন'}</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded Orders List for this Deposited Rider */}
+                            {isExpanded && (
+                              <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 bg-sky-50/30 -mx-4 -mb-4 p-4">
+                                <div className="text-xs font-bold text-slate-700 mb-2">
+                                  এই রাইডারের অফিসে জমা হওয়া অর্ডারের তালিকা:
+                                </div>
+                                {rider.orders.map((ord, oIdx) => (
+                                  <div
+                                    key={`dep-sub-${ord.id}-${oIdx}`}
+                                    className="bg-white p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                                  >
+                                    <div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-mono font-bold text-slate-900">#{ord.id}</span>
+                                        <span className="text-[10px] text-slate-500">
+                                          {new Date(ord.createdAt).toLocaleDateString('bn-BD', {
+                                            day: 'numeric',
+                                            month: 'short',
+                                            year: 'numeric',
+                                          })}
+                                        </span>
+                                        <span className="bg-sky-100 text-sky-800 text-[10px] font-bold px-1.5 py-0.2 rounded-md">
+                                          ✅ অফিসে জমা প্রাপ্ত
+                                        </span>
+                                      </div>
+                                      <div className="text-slate-600 mt-1">
+                                        গ্রাহক:{' '}
+                                        <strong className="text-slate-800">{ord.customerName}</strong> (
+                                        {ord.customerPhone})
+                                      </div>
+                                      <div className="text-slate-500 text-[11px]">
+                                        ঠিকানা: {ord.deliveryAddress}{' '}
+                                        {ord.unionNameBn ? `• ${ord.unionNameBn}` : ''}
+                                      </div>
+                                    </div>
+                                    <div className="text-right sm:self-center font-black text-sky-950 text-sm">
+                                      {formatBDT(ord.totalAmount)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ))}
+
+                  {/* TYPE C: Order Lists (Total Orders, Total Delivery, Total Pending, Total Cancelled, Total Sale) */}
+                  {['total_orders', 'total_delivered', 'total_pending', 'total_cancelled', 'total_sale'].includes(
+                    summaryDetailType
+                  ) &&
+                    (detailModalOrders.length === 0 ? (
+                      <div className="text-center py-12 text-slate-400 text-xs bg-white rounded-3xl border border-slate-200">
+                        {language === 'bn'
+                          ? 'এই ক্যাটাগরিতে কোনো অর্ডার পাওয়া যায়নি।'
+                          : 'No orders found matching this filter.'}
+                      </div>
+                    ) : (
+                      detailModalOrders.map((ord, idx) => (
+                        <div
+                          key={`modal-ord-${ord.id}-${idx}`}
+                          className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5 hover:border-slate-300 transition-all"
+                        >
+                          {/* Order Top Bar */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-mono font-bold text-xs sm:text-sm text-slate-900">
+                                #{ord.id}
+                              </span>
+                              <StatusBadge status={ord.orderStatus} size="sm" />
+                              <span className="text-[11px] text-slate-500 flex items-center space-x-1">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                <span>
+                                  {new Date(ord.createdAt).toLocaleString('bn-BD', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              {ord.paymentStatus === 'deposited' ? (
+                                <span className="bg-sky-100 text-sky-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                  🏦 অফিসে টাকা জমা প্রাপ্ত
+                                </span>
+                              ) : ord.paymentStatus === 'collected' ? (
+                                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                  🛵 রাইডারের কাছে ক্যাশ আছে
+                                </span>
+                              ) : (
+                                <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                  COD ক্যাশ অন ডেলিভারি
+                                </span>
+                              )}
+                              <span className="text-sm font-black text-emerald-800">
+                                {formatBDT(ord.totalAmount)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Customer and Rider Details Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 text-xs">
+                            {/* Customer Block */}
+                            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                              <div className="font-bold text-slate-800 flex items-center space-x-1.5 mb-1.5">
+                                <Users className="w-3.5 h-3.5 text-slate-500" />
+                                <span>কাস্টমারের তথ্য (Customer)</span>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="font-semibold text-slate-900">{ord.customerName}</div>
+                                <div className="flex items-center space-x-1">
+                                  <Phone className="w-3 h-3 text-emerald-600" />
+                                  <a
+                                    href={`tel:${ord.customerPhone}`}
+                                    className="text-emerald-700 font-mono hover:underline"
+                                  >
+                                    {ord.customerPhone}
+                                  </a>
+                                </div>
+                                <div className="text-slate-500 flex items-start space-x-1">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                                  <span>
+                                    {ord.deliveryAddress}
+                                    {ord.unionNameBn ? ` • ইউনিয়ন: ${ord.unionNameBn}` : ''}
+                                    {ord.thanaNameBn ? ` • থানা: ${ord.thanaNameBn}` : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Rider Block */}
+                            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                              <div className="font-bold text-slate-800 flex items-center space-x-1.5 mb-1.5">
+                                <Bike className="w-3.5 h-3.5 text-slate-500" />
+                                <span>ডেলিভারি রাইডার (Delivery Rider)</span>
+                              </div>
+                              {ord.riderId ? (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-slate-900 flex items-center space-x-1.5">
+                                    <span>{ord.riderName || 'রাইডার'}</span>
+                                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.2 rounded-md">
+                                      {ord.orderStatus === 'delivered' ? 'ডেলিভারি করেছে' : 'ডেলিভারিতে নিয়োজিত'}
+                                    </span>
+                                  </div>
+                                  {ord.riderPhone && (
+                                    <div className="flex items-center space-x-1">
+                                      <Phone className="w-3 h-3 text-emerald-600" />
+                                      <a
+                                        href={`tel:${ord.riderPhone}`}
+                                        className="text-emerald-700 font-mono hover:underline"
+                                      >
+                                        {ord.riderPhone}
+                                      </a>
+                                    </div>
+                                  )}
+                                  <div className="text-[11px] text-slate-500">
+                                    রাইডার আইডি: <span className="font-mono">{ord.riderId}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-slate-400 py-2">
+                                  ⚠️ এই অর্ডারে এখনো কোনো রাইডার এসাইন করা হয়নি।
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Ordered Items Summary */}
+                          {Array.isArray(ord.items) && ord.items.length > 0 && (
+                            <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+                              <div className="flex flex-wrap gap-1.5 items-center">
+                                <span className="font-bold text-slate-700">পণ্য তালিকা:</span>
+                                {ord.items.map((it, iIdx) => (
+                                  <span
+                                    key={`ord-item-${iIdx}`}
+                                    className="bg-white px-2 py-0.5 rounded-md border border-slate-200 text-slate-700"
+                                  >
+                                    {it.nameBn || it.nameEn} ({it.quantity} {it.unit || 'টি'})
+                                  </span>
+                                ))}
+                              </div>
+
+                              <div className="text-slate-500 font-medium">
+                                সাবটোটাল: ৳{ord.subtotal} + ডেলিভারি ফি: ৳{ord.deliveryFee} ={' '}
+                                <strong>৳{ord.totalAmount}</strong>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ))}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-3.5 sm:p-4 border-t border-slate-100 bg-white flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    {summaryDetailType === 'rider_balance' || summaryDetailType === 'office_deposit'
+                      ? 'রাইডারের নামের পাশে "অর্ডার দেখুন" ক্লিক করে বিস্তারিত দেখতে পারেন'
+                      : 'অর্ডারের সাথে রাইডার ও কাস্টমারের সরাসরি যোগাযোগের নম্বর যুক্ত আছে'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSummaryDetailType(null);
+                      setSummaryDetailSearch('');
+                      setExpandedRiderId(null);
+                    }}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition-colors"
+                  >
+                    বন্ধ করুন (Close)
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* TWO MAIN RANKED LISTS: TOP SALES PRODUCTS & TOP CUSTOMERS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
