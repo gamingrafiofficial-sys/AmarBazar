@@ -46,6 +46,12 @@ import {
   EyeOff,
   Lock,
   Globe,
+  BarChart3,
+  TrendingUp,
+  Award,
+  Crown,
+  DollarSign,
+  Calendar,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -118,7 +124,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }, [inputOrders]);
 
-  const [activeTab, setActiveTab] = useState<'new_orders' | 'all_orders' | 'rider_balances' | 'products' | 'areas' | 'riders'>('new_orders');
+  const [activeTab, setActiveTab] = useState<'summary' | 'new_orders' | 'all_orders' | 'rider_balances' | 'products' | 'areas' | 'riders'>('summary');
+
+  // Summary Overview State & Filtering
+  const [summaryTimeFilter, setSummaryTimeFilter] = useState<'today' | 'month' | 'all'>('all');
+  const [topProductSearch, setTopProductSearch] = useState('');
+  const [topCustomerSearch, setTopCustomerSearch] = useState('');
 
   // Search & Filter in all orders
   const [orderSearch, setOrderSearch] = useState('');
@@ -277,6 +288,215 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return matchStatus && matchThana && matchUnion && matchSearch;
   });
+
+  // Filtered orders for Summary Overview based on Time Range (today, month, all)
+  const filteredSummaryOrders = React.useMemo(() => {
+    if (summaryTimeFilter === 'all') return orders;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentDate = now.getDate();
+
+    return orders.filter((o) => {
+      if (!o.createdAt) return false;
+      const d = new Date(o.createdAt);
+      if (isNaN(d.getTime())) return false;
+      if (summaryTimeFilter === 'today') {
+        return (
+          d.getFullYear() === currentYear &&
+          d.getMonth() === currentMonth &&
+          d.getDate() === currentDate
+        );
+      }
+      if (summaryTimeFilter === 'month') {
+        return (
+          d.getFullYear() === currentYear &&
+          d.getMonth() === currentMonth
+        );
+      }
+      return true;
+    });
+  }, [orders, summaryTimeFilter]);
+
+  // 7 Key KPI Overview Metrics
+  const summaryMetrics = React.useMemo(() => {
+    // 1. Total Order (সর্বমোট অর্ডার)
+    const totalOrders = filteredSummaryOrders.length;
+
+    // 2. Total Delivery (মোট ডেলিভারি সম্পন্ন)
+    const totalDelivered = filteredSummaryOrders.filter(
+      (o) => o.orderStatus === 'delivered'
+    ).length;
+
+    // 3. Total Pending (অপেক্ষমান ও চলমান অর্ডার)
+    const totalPending = filteredSummaryOrders.filter((o) =>
+      ['pending', 'confirmed', 'processing', 'rider_assigned', 'picked_up', 'out_for_delivery'].includes(
+        o.orderStatus
+      )
+    ).length;
+
+    // 4. Total Cancelled (বাতিলকৃত বা রিটার্ন অর্ডার)
+    const totalCancelled = filteredSummaryOrders.filter(
+      (o) => o.orderStatus === 'cancelled' || o.orderStatus === 'returned'
+    ).length;
+
+    // 5. Total Balance: যেটা রাইডারের কাছে বকেয়া ক্যাশ আছে (paymentStatus === 'collected')
+    const totalBalanceRider = filteredSummaryOrders
+      .filter((o) => o.paymentStatus === 'collected')
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+    // 6. Total Cash: যেটা রাইডার অফিসে টাকা জমা দিয়েছে (paymentStatus === 'deposited')
+    const totalCashOffice = filteredSummaryOrders
+      .filter((o) => o.paymentStatus === 'deposited')
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+    // 7. Total Sale: কত টাকার প্রোডাক্ট বিক্রি হয়েছে (delivered orders revenue)
+    const totalSale = filteredSummaryOrders
+      .filter((o) => o.orderStatus === 'delivered')
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+
+    return {
+      totalOrders,
+      totalDelivered,
+      totalPending,
+      totalCancelled,
+      totalBalanceRider,
+      totalCashOffice,
+      totalSale,
+    };
+  }, [filteredSummaryOrders]);
+
+  // Top Sales Products List (সর্বাধিক বিক্রীত পণ্য - রেংকিং অনুযায়ী)
+  const topSellingProducts = React.useMemo(() => {
+    const validOrders = filteredSummaryOrders.filter(
+      (o) => o.orderStatus !== 'cancelled' && o.orderStatus !== 'returned'
+    );
+
+    const productMap = new Map<
+      string,
+      {
+        productId: string;
+        nameBn: string;
+        nameEn: string;
+        category: string;
+        imageUrl: string;
+        unit: string;
+        quantitySold: number;
+        totalRevenue: number;
+        orderCount: number;
+      }
+    >();
+
+    validOrders.forEach((o) => {
+      if (!Array.isArray(o.items)) return;
+      o.items.forEach((item) => {
+        const pid = item.productId || item.nameEn || 'unknown';
+        const catalogProd = products.find((p) => p.id === item.productId);
+
+        const existing = productMap.get(pid) || {
+          productId: pid,
+          nameBn: item.nameBn || catalogProd?.nameBn || 'পণ্য',
+          nameEn: item.nameEn || catalogProd?.nameEn || 'Product',
+          category: catalogProd?.categoryId || 'daily_products',
+          imageUrl: catalogProd?.imageUrl || 'https://placehold.co/100x100?text=Product',
+          unit: item.unit || catalogProd?.unit || 'টি',
+          quantitySold: 0,
+          totalRevenue: 0,
+          orderCount: 0,
+        };
+
+        const itemQty = Number(item.quantity) || 1;
+        const itemSubtotal =
+          Number(item.lineTotal) || (Number(item.price) || 0) * itemQty;
+
+        existing.quantitySold += itemQty;
+        existing.totalRevenue += itemSubtotal;
+        existing.orderCount += 1;
+
+        productMap.set(pid, existing);
+      });
+    });
+
+    const list = Array.from(productMap.values()).sort(
+      (a, b) => b.quantitySold - a.quantitySold || b.totalRevenue - a.totalRevenue
+    );
+
+    if (!topProductSearch.trim()) return list;
+    const q = topProductSearch.toLowerCase().trim();
+    return list.filter(
+      (p) =>
+        p.nameBn.toLowerCase().includes(q) ||
+        p.nameEn.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q)
+    );
+  }, [filteredSummaryOrders, products, topProductSearch]);
+
+  // Top Customer List (সর্বোচ্চ ক্রয় করা কাস্টমার তালিকা - রেংকিং অনুযায়ী)
+  const topCustomers = React.useMemo(() => {
+    const validOrders = filteredSummaryOrders.filter(
+      (o) => o.orderStatus !== 'cancelled' && o.orderStatus !== 'returned'
+    );
+
+    const customerMap = new Map<
+      string,
+      {
+        phone: string;
+        name: string;
+        address: string;
+        thana: string;
+        union: string;
+        totalOrders: number;
+        deliveredOrders: number;
+        totalSpent: number;
+        lastOrderDate: string;
+      }
+    >();
+
+    validOrders.forEach((o) => {
+      const rawPhone = (o.customerPhone || '').trim();
+      const cleanPhone = normalizePhone(rawPhone) || rawPhone;
+      if (!cleanPhone) return;
+
+      const existing = customerMap.get(cleanPhone) || {
+        phone: rawPhone,
+        name: o.customerName || 'সম্মানিত গ্রাহক',
+        address: o.deliveryAddress || '',
+        thana: o.thanaNameBn || o.marketId || '',
+        union: o.unionNameBn || '',
+        totalOrders: 0,
+        deliveredOrders: 0,
+        totalSpent: 0,
+        lastOrderDate: o.createdAt || '',
+      };
+
+      existing.totalOrders += 1;
+      if (o.orderStatus === 'delivered') {
+        existing.deliveredOrders += 1;
+      }
+      existing.totalSpent += Number(o.totalAmount) || 0;
+      if (new Date(o.createdAt).getTime() > new Date(existing.lastOrderDate || 0).getTime()) {
+        existing.lastOrderDate = o.createdAt;
+        if (o.deliveryAddress) existing.address = o.deliveryAddress;
+        if (o.customerName) existing.name = o.customerName;
+      }
+
+      customerMap.set(cleanPhone, existing);
+    });
+
+    const list = Array.from(customerMap.values()).sort(
+      (a, b) => b.totalSpent - a.totalSpent || b.totalOrders - a.totalOrders
+    );
+
+    if (!topCustomerSearch.trim()) return list;
+    const q = topCustomerSearch.toLowerCase().trim();
+    return list.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.phone.includes(q) ||
+        c.address.toLowerCase().includes(q) ||
+        c.union.toLowerCase().includes(q)
+    );
+  }, [filteredSummaryOrders, topCustomerSearch]);
 
   const handleProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -487,6 +707,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Navigation Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 mb-6">
         <button
+          onClick={() => setActiveTab('summary')}
+          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'summary'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>{language === 'bn' ? 'সামারি ওভারভিউ' : 'Summary Overview'}</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('new_orders')}
           className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'new_orders'
@@ -569,6 +801,500 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span>{language === 'bn' ? 'প্রোডাক্ট ক্যাটালগ' : 'Product Catalog'} ({products.length})</span>
         </button>
       </div>
+
+      {/* TAB 0: SUMMARY OVERVIEW (সামারি ও পারফরম্যান্স ওভারভিউ) */}
+      {activeTab === 'summary' && (
+        <div className="space-y-6">
+          {/* Header & Time Filters */}
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-emerald-100 text-emerald-800">
+                  <BarChart3 className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-black text-slate-900">
+                  {language === 'bn' ? 'টোটাল সামারি ও পারফরম্যান্স ওভারভিউ' : 'Total Summary & Performance Overview'}
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'অর্ডার, ডেলিভারি, বকেয়া ব্যালেন্স, অফিস ক্যাশ জমা ও বিক্রয়ের রিয়েলটাইম হিসাব'
+                  : 'Real-time overview of orders, deliveries, rider balances, office deposits, and sales'}
+              </p>
+            </div>
+
+            {/* Time Filtering Pills */}
+            <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl self-start md:self-auto gap-1 border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setSummaryTimeFilter('today')}
+                className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  summaryTimeFilter === 'today'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>{language === 'bn' ? 'আজকের হিসাব' : "Today's Stats"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSummaryTimeFilter('month')}
+                className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  summaryTimeFilter === 'month'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{language === 'bn' ? 'এই মাসের হিসাব' : 'This Month'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSummaryTimeFilter('all')}
+                className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  summaryTimeFilter === 'all'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>{language === 'bn' ? 'লাইফটাইম হিসাব' : 'Lifetime (All)'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 7 KEY KPI OVERVIEW CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+            {/* 1. Total Order */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  {language === 'bn' ? 'সর্বমোট অর্ডার' : 'Total Order'}
+                </span>
+                <span className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                  <Package className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-slate-900">
+                  {summaryMetrics.totalOrders}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {language === 'bn' ? 'মোট প্রাপ্ত অর্ডার' : 'Total orders placed'}
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Total Delivery */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-emerald-200/80 bg-emerald-50/20 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                  {language === 'bn' ? 'মোট ডেলিভারি' : 'Total Delivery'}
+                </span>
+                <span className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <CheckCircle className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-800">
+                  {summaryMetrics.totalDelivered}
+                </div>
+                <div className="text-[10px] text-emerald-600 mt-0.5">
+                  {language === 'bn' ? 'ডেলিভারি সম্পন্ন' : 'Delivered successfully'}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Total Pending */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-amber-200/80 bg-amber-50/20 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                  {language === 'bn' ? 'পেন্ডিং অর্ডার' : 'Total Pending'}
+                </span>
+                <span className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                  <Clock className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-amber-800">
+                  {summaryMetrics.totalPending}
+                </div>
+                <div className="text-[10px] text-amber-600 mt-0.5">
+                  {language === 'bn' ? 'চলমান ও অপেক্ষমান' : 'Active & in transit'}
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Total Cancelled */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-rose-200/80 bg-rose-50/20 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">
+                  {language === 'bn' ? 'বাতিলকৃত' : 'Total Cancelled'}
+                </span>
+                <span className="p-2 rounded-xl bg-rose-100 text-rose-700">
+                  <AlertCircle className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-xl sm:text-2xl font-black text-rose-800">
+                  {summaryMetrics.totalCancelled}
+                </div>
+                <div className="text-[10px] text-rose-600 mt-0.5">
+                  {language === 'bn' ? 'বাতিল বা ফেরতকৃত' : 'Cancelled or returned'}
+                </div>
+              </div>
+            </div>
+
+            {/* 5. Total Balance (যেটা রাইডারের কাছে আছে) */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-amber-300 bg-amber-500/10 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black text-amber-900 uppercase tracking-wider">
+                  {language === 'bn' ? 'রাইডার ব্যালেন্স' : 'Rider Balance'}
+                </span>
+                <span className="p-2 rounded-xl bg-amber-200 text-amber-900">
+                  <Wallet className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-lg sm:text-xl font-black text-amber-950">
+                  {formatBDT(summaryMetrics.totalBalanceRider)}
+                </div>
+                <div className="text-[10px] text-amber-800 font-medium mt-0.5">
+                  {language === 'bn' ? 'রাইডারের হাতে বকেয়া' : 'Pending with riders'}
+                </div>
+              </div>
+            </div>
+
+            {/* 6. Total Cash (যেটা রাইডার অফিসে জমা দিয়েছে) */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-sky-300 bg-sky-500/10 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black text-sky-900 uppercase tracking-wider">
+                  {language === 'bn' ? 'অফিস ক্যাশ জমা' : 'Office Deposited'}
+                </span>
+                <span className="p-2 rounded-xl bg-sky-200 text-sky-900">
+                  <Banknote className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-lg sm:text-xl font-black text-sky-950">
+                  {formatBDT(summaryMetrics.totalCashOffice)}
+                </div>
+                <div className="text-[10px] text-sky-800 font-medium mt-0.5">
+                  {language === 'bn' ? 'অফিসে জমা প্রাপ্ত ক্যাশ' : 'Deposited to office'}
+                </div>
+              </div>
+            </div>
+
+            {/* 7. Total Sale (কত টাকার প্রোডাক্ট বিক্রি হয়েছে) */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-emerald-400 bg-emerald-600 text-white shadow-md flex flex-col justify-between hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black text-emerald-100 uppercase tracking-wider">
+                  {language === 'bn' ? 'মোট বিক্রয় (সেল)' : 'Total Sale'}
+                </span>
+                <span className="p-2 rounded-xl bg-white/20 text-white">
+                  <TrendingUp className="w-4 h-4" />
+                </span>
+              </div>
+              <div>
+                <div className="text-lg sm:text-xl font-black text-white">
+                  {formatBDT(summaryMetrics.totalSale)}
+                </div>
+                <div className="text-[10px] text-emerald-100 font-medium mt-0.5">
+                  {language === 'bn' ? 'মোট ডেলিভারি বিক্রয়' : 'Delivered sales revenue'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TWO MAIN RANKED LISTS: TOP SALES PRODUCTS & TOP CUSTOMERS */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* SECTION 1: TOP SALES PRODUCTS LIST */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 flex-wrap gap-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-2 rounded-2xl bg-amber-100 text-amber-800">
+                      <Award className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-black text-slate-900">
+                        {language === 'bn' ? 'সর্বাধিক বিক্রীত পণ্য (Top Sales Products)' : 'Top Sales Products Ranking'}
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        {language === 'bn'
+                          ? 'বিক্রির পরিমাণ ও মোট আয়ের ভিত্তিতে র‍্যাংকিং'
+                          : 'Ranked by quantity sold & total revenue generated'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-1 rounded-xl">
+                    {topSellingProducts.length} {language === 'bn' ? 'টি পণ্য' : 'products'}
+                  </span>
+                </div>
+
+                {/* Product Search Filter */}
+                <div className="relative mb-4">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={topProductSearch}
+                    onChange={(e) => setTopProductSearch(e.target.value)}
+                    placeholder={
+                      language === 'bn'
+                        ? 'পণ্য বা ক্যাটাগরি দিয়ে খুঁজুন...'
+                        : 'Search top products by name or category...'
+                    }
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {topProductSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTopProductSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Products Table/List */}
+                {topSellingProducts.length === 0 ? (
+                  <div className="text-center py-10 text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    {language === 'bn'
+                      ? 'এই সময়ে কোনো বিক্রিত পণ্য পাওয়া যায়নি।'
+                      : 'No product sales recorded in this period.'}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+                    {topSellingProducts.map((p, idx) => {
+                      const rank = idx + 1;
+                      const isTop1 = rank === 1;
+                      const isTop2 = rank === 2;
+                      const isTop3 = rank === 3;
+
+                      return (
+                        <div
+                          key={`top-prod-${p.productId}-${idx}`}
+                          className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                            isTop1
+                              ? 'bg-amber-50/70 border-amber-300 shadow-xs'
+                              : isTop2
+                              ? 'bg-slate-50 border-slate-300'
+                              : isTop3
+                              ? 'bg-orange-50/50 border-orange-200'
+                              : 'bg-white border-slate-100 hover:border-slate-200'
+                          }`}
+                        >
+                          {/* Rank badge & Image */}
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <div className="relative shrink-0">
+                              <span
+                                className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                                  isTop1
+                                    ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                                    : isTop2
+                                    ? 'bg-slate-300 text-slate-800'
+                                    : isTop3
+                                    ? 'bg-amber-700 text-white'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {isTop1 ? <Crown className="w-3.5 h-3.5" /> : `#${rank}`}
+                              </span>
+                            </div>
+
+                            <img
+                              src={p.imageUrl}
+                              alt={p.nameEn}
+                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-100"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src =
+                                  'https://placehold.co/100x100?text=Product';
+                              }}
+                            />
+
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-slate-900 truncate">
+                                {language === 'bn' ? p.nameBn : p.nameEn}
+                              </h4>
+                              <div className="flex items-center space-x-2 text-[10px] text-slate-500 mt-0.5">
+                                <span className="bg-slate-200/70 px-1.5 py-0.5 rounded-md font-medium">
+                                  {p.category}
+                                </span>
+                                <span>{p.orderCount} টি অর্ডারে</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Sales Count & Total Revenue */}
+                          <div className="text-right shrink-0 ml-3">
+                            <div className="text-xs font-black text-emerald-700">
+                              {p.quantitySold} {p.unit}
+                            </div>
+                            <div className="text-[11px] font-bold text-slate-800 mt-0.5">
+                              {formatBDT(p.totalRevenue)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SECTION 2: TOP CUSTOMER LIST */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 flex-wrap gap-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-2 rounded-2xl bg-indigo-100 text-indigo-800">
+                      <Users className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-black text-slate-900">
+                        {language === 'bn' ? 'শীর্ষ কাস্টমার তালিকা (Top Customers)' : 'Top Customer Rankings'}
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        {language === 'bn'
+                          ? 'সর্বোচ্চ কেনাকাটার পরিমাণ ও অর্ডার সংখ্যার ভিত্তিতে'
+                          : 'Ranked by total purchase amount and order frequency'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-1 rounded-xl">
+                    {topCustomers.length} {language === 'bn' ? 'জন গ্রাহক' : 'customers'}
+                  </span>
+                </div>
+
+                {/* Customer Search Filter */}
+                <div className="relative mb-4">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={topCustomerSearch}
+                    onChange={(e) => setTopCustomerSearch(e.target.value)}
+                    placeholder={
+                      language === 'bn'
+                        ? 'কাস্টমারের নাম, ফোন নম্বর বা এলাকা দিয়ে খুঁজুন...'
+                        : 'Search top customers by name, phone or location...'
+                    }
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {topCustomerSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTopCustomerSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Customers Table/List */}
+                {topCustomers.length === 0 ? (
+                  <div className="text-center py-10 text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    {language === 'bn'
+                      ? 'এই সময়ে কোনো কাস্টমার অর্ডার পাওয়া যায়নি।'
+                      : 'No customer purchases recorded in this period.'}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+                    {topCustomers.map((c, idx) => {
+                      const rank = idx + 1;
+                      const isTop1 = rank === 1;
+                      const isTop2 = rank === 2;
+                      const isTop3 = rank === 3;
+
+                      return (
+                        <div
+                          key={`top-cust-${c.phone}-${idx}`}
+                          className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+                            isTop1
+                              ? 'bg-amber-50/70 border-amber-300 shadow-xs'
+                              : isTop2
+                              ? 'bg-indigo-50/40 border-indigo-200'
+                              : isTop3
+                              ? 'bg-emerald-50/30 border-emerald-200'
+                              : 'bg-white border-slate-100 hover:border-slate-200'
+                          }`}
+                        >
+                          {/* Rank badge & Customer info */}
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <span
+                              className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                                isTop1
+                                  ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                                  : isTop2
+                                  ? 'bg-slate-300 text-slate-800'
+                                  : isTop3
+                                  ? 'bg-amber-700 text-white'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {isTop1 ? <Crown className="w-3.5 h-3.5" /> : `#${rank}`}
+                            </span>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <h4 className="text-xs font-bold text-slate-900 truncate">
+                                  {c.name}
+                                </h4>
+                                {isTop1 && (
+                                  <span className="bg-amber-400/90 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-md">
+                                    VIP #1
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center space-x-2 text-[10px] text-slate-500 mt-0.5 flex-wrap gap-y-0.5">
+                                <a
+                                  href={`tel:${c.phone}`}
+                                  className="text-emerald-700 hover:underline font-mono font-medium flex items-center space-x-0.5"
+                                  title="কল করুন"
+                                >
+                                  <Phone className="w-2.5 h-2.5 mr-0.5 inline" />
+                                  <span>{c.phone}</span>
+                                </a>
+                                {(c.union || c.thana) && (
+                                  <span className="text-slate-400">
+                                    • {c.union ? c.union : c.thana}
+                                  </span>
+                                )}
+                              </div>
+                              {c.address && (
+                                <p className="text-[10px] text-slate-400 truncate mt-0.5 max-w-[200px] sm:max-w-[280px]">
+                                  📍 {c.address}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Purchase amount & Order count */}
+                          <div className="text-right shrink-0 ml-3">
+                            <div className="text-xs font-black text-emerald-800">
+                              {formatBDT(c.totalSpent)}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                              {c.totalOrders} টি অর্ডার ({c.deliveredOrders} সম্পন্ন)
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: NEW ORDERS */}
       {activeTab === 'new_orders' && (
