@@ -65,6 +65,7 @@ import {
   RefreshCw,
   UserCheck,
   ShieldCheck,
+  Store,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -159,9 +160,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     | 'fake_orders'
     | 'deposit_requests'
     | 'transactions'
+    | 'outlet'
   >('summary');
 
-  // Rider Cancelled & Fake Order State
+  // Outlet Management State
+  const [outlets, setOutlets] = useState([
+    {
+      id: 'outlet-kaliganj-1',
+      nameBn: 'কালীগঞ্জ সেন্ট্রাল ডিস্ট্রিবিউশন হাব',
+      nameEn: 'Kaliganj Central Hub & Outlet',
+      hubType: 'সেন্ট্রাল হাব ও ওয়্যারহাউজ',
+      thanaId: 'kaliganj',
+      thanaNameBn: 'কালীগঞ্জ',
+      addressBn: 'কালীগঞ্জ বাজার মেইন রোড, কালীগঞ্জ পৌরসভা, গাজীপুর',
+      managerName: 'মোঃ শফিকুল ইসলাম',
+      phone: '01712-345678',
+      coverageUnions: ['কালীগঞ্জ পৌরসভা', 'তুমুলিয়া', 'বক্তারপুর', 'জাঙ্গালিয়া', 'নাগরী'],
+      timing: 'সকাল ৭:০০ - রাত ১০:০০',
+      status: 'active',
+      staffCount: 6,
+      dailyDispatch: 42,
+    },
+    {
+      id: 'outlet-kapasia-1',
+      nameBn: 'কাপাসিয়া ফ্রেশ প্রডিউস ডিপো ও আউটলেট',
+      nameEn: 'Kapasia Fresh Produce Depot',
+      hubType: 'রিজিওনাল ফ্রেশ ডিপো',
+      thanaId: 'kapasia',
+      thanaNameBn: 'কাপাসিয়া',
+      addressBn: 'কাপাসিয়া সদর থানা মোড়, কাপাসিয়া, গাজীপুর',
+      managerName: 'আরিফুল হাসান',
+      phone: '01819-876543',
+      coverageUnions: ['কাপাসিয়া সদর', 'বরমী', 'তরগাঁও', 'দুর্গাপুর', 'রায়েদ', 'চাঁদপুর'],
+      timing: 'সকাল ৬:৩০ - রাত ৯:৩০',
+      status: 'active',
+      staffCount: 5,
+      dailyDispatch: 38,
+    },
+    {
+      id: 'outlet-jamalpur-1',
+      nameBn: 'জামালপুর-নাগরী এক্সপ্রেস কালেকশন পয়েন্ট',
+      nameEn: 'Jamalpur-Nagari Express Point',
+      hubType: 'কুইক পিকআপ ও কালেকশন পয়েন্ট',
+      thanaId: 'kaliganj',
+      thanaNameBn: 'কালীগঞ্জ',
+      addressBn: 'জামালপুর বাসস্ট্যান্ড সংলগ্ন, কালীগঞ্জ, গাজীপুর',
+      managerName: 'তানভীর আহমেদ',
+      phone: '01911-223344',
+      coverageUnions: ['জামালপুর', 'নাগরী', 'বাহাদুরশাদী', 'মোক্তারপুর'],
+      timing: 'সকাল ৮:০০ - রাত ৯:০০',
+      status: 'active',
+      staffCount: 3,
+      dailyDispatch: 24,
+    },
+  ]);
+  const [outletSearch, setOutletSearch] = useState('');
+  const [showAddOutletModal, setShowAddOutletModal] = useState(false);
+  const [newOutletNameBn, setNewOutletNameBn] = useState('');
+  const [newOutletNameEn, setNewOutletNameEn] = useState('');
+  const [newOutletThana, setNewOutletThana] = useState('kaliganj');
+  const [newOutletAddressBn, setNewOutletAddressBn] = useState('');
+  const [newOutletManager, setNewOutletManager] = useState('');
+  const [newOutletPhone, setNewOutletPhone] = useState('');
+  const [newOutletTiming, setNewOutletTiming] = useState('সকাল ৭:০০ - রাত ১০:০০');
+
   const [riderCancelledSearch, setRiderCancelledSearch] = useState('');
   const [fakeOrderSearch, setFakeOrderSearch] = useState('');
   const [reassignModalOrder, setReassignModalOrder] = useState<Order | null>(null);
@@ -1007,57 +1069,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 mb-6">
+      {/* Navigation Tabs (3-Column Grid on Mobile, Icon on Top, Name Below, Box Design) */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-2.5 pb-4 mb-6 border-b border-slate-200">
+        {/* Box 1: Summary Overview */}
         <button
+          type="button"
           onClick={() => setActiveTab('summary')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'summary'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <BarChart3 className="w-4 h-4" />
-          <span>{language === 'bn' ? 'সামারি ওভারভিউ' : 'Summary Overview'}</span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'summary'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'সামারি ওভারভিউ' : 'Summary'}
+          </span>
         </button>
 
+        {/* Box 2: New Orders */}
         <button
+          type="button"
           onClick={() => setActiveTab('new_orders')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'new_orders'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Clock className="w-4 h-4" />
-          <span>{language === 'bn' ? 'নতুন অর্ডার' : 'New Orders'} ({newOrders.length})</span>
+          <span
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-2xs ${
+              newOrders.length > 0
+                ? activeTab === 'new_orders'
+                  ? 'bg-amber-400 text-slate-950 font-black'
+                  : 'bg-rose-500 text-white animate-pulse'
+                : activeTab === 'new_orders'
+                ? 'bg-emerald-900 text-white'
+                : 'bg-slate-100 text-slate-500'
+            }`}
+          >
+            {newOrders.length}
+          </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'new_orders'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-blue-50 text-blue-700'
+            }`}
+          >
+            <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'নতুন অর্ডার' : 'New Orders'}
+          </span>
         </button>
 
+        {/* Box 3: All Orders */}
         <button
+          type="button"
           onClick={() => setActiveTab('all_orders')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'all_orders'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Package className="w-4 h-4" />
-          <span>{language === 'bn' ? 'সকল অর্ডার' : 'All Orders'} ({orders.length})</span>
+          <span
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'all_orders' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {orders.length}
+          </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'all_orders'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <Package className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'সকল অর্ডার' : 'All Orders'}
+          </span>
         </button>
 
+        {/* Box 4: Rider Balances & Reports */}
         <button
+          type="button"
           onClick={() => setActiveTab('rider_balances')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'rider_balances'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Wallet className="w-4 h-4" />
-          <span>{language === 'bn' ? 'রাইডার ব্যালেন্স ও রিপোর্ট' : 'Rider Balances & Reports'} ({registeredRiders.length})</span>
-          {totalUnsettledCashAllRiders > 0 && (
+          {totalUnsettledCashAllRiders > 0 ? (
             <span
-              className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+              className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-2xs font-mono ${
                 activeTab === 'rider_balances'
                   ? 'bg-amber-400 text-slate-950'
                   : 'bg-rose-500 text-white'
@@ -1065,80 +1183,143 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               ৳{totalUnsettledCashAllRiders}
             </span>
+          ) : (
+            <span
+              className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                activeTab === 'rider_balances' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {registeredRiders.length}
+            </span>
           )}
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'rider_balances'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            <Wallet className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'রাইডার ব্যালেন্স' : 'Rider Balances'}
+          </span>
         </button>
 
+        {/* Box 5: Riders Management */}
         <button
+          type="button"
           onClick={() => setActiveTab('riders')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'riders'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Bike className="w-4 h-4" />
-          <span>{language === 'bn' ? 'রাইডার ম্যানেজমেন্ট' : 'Riders'} ({registeredRiders.length})</span>
+          <span
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'riders' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {registeredRiders.length}
+          </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'riders'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <Bike className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'রাইডারগণ' : 'Riders'}
+          </span>
         </button>
 
+        {/* Box 6: Rider Cancelled */}
         <button
+          type="button"
           onClick={() => setActiveTab('rider_cancelled')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'rider_cancelled'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-amber-600 text-white border-amber-700 shadow-sm ring-2 ring-amber-400/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <XCircle className="w-4 h-4 text-amber-500" />
-          <span>{language === 'bn' ? 'রাইডার বাতিলকৃত' : 'Rider Cancelled'}</span>
           <span
-            className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
               riderCancelledOrders.length > 0
                 ? activeTab === 'rider_cancelled'
-                  ? 'bg-white text-amber-900'
-                  : 'bg-amber-500 text-white'
-                : 'bg-slate-200 text-slate-600'
+                  ? 'bg-white text-amber-900 font-black'
+                  : 'bg-amber-500 text-white font-black'
+                : 'bg-slate-100 text-slate-500'
             }`}
           >
             {riderCancelledOrders.length}
           </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'rider_cancelled'
+                ? 'bg-amber-700 text-white'
+                : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            <XCircle className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'রাইডার বাতিল' : 'Rider Cancelled'}
+          </span>
         </button>
 
+        {/* Box 7: Fake Orders */}
         <button
+          type="button"
           onClick={() => setActiveTab('fake_orders')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'fake_orders'
-              ? 'bg-rose-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-rose-700 text-white border-rose-800 shadow-sm ring-2 ring-rose-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <AlertTriangle className="w-4 h-4 text-rose-500" />
-          <span>{language === 'bn' ? 'ফেক অর্ডার তালিকা' : 'Fake Orders'}</span>
           <span
-            className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
               fakeOrders.length > 0
                 ? activeTab === 'fake_orders'
-                  ? 'bg-white text-rose-900'
-                  : 'bg-rose-500 text-white'
-                : 'bg-slate-200 text-slate-600'
+                  ? 'bg-white text-rose-900 font-black'
+                  : 'bg-rose-600 text-white font-black'
+                : 'bg-slate-100 text-slate-500'
             }`}
           >
             {fakeOrders.length}
           </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'fake_orders'
+                ? 'bg-rose-800 text-white'
+                : 'bg-rose-50 text-rose-700'
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'ফেক অর্ডার' : 'Fake Orders'}
+          </span>
         </button>
 
+        {/* Box 8: Deposit Requests */}
         <button
+          type="button"
           onClick={() => setActiveTab('deposit_requests')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'deposit_requests'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Banknote className="w-4 h-4" />
-          <span>{language === 'bn' ? 'ক্যাশ জমার রিকোয়েস্ট' : 'Deposit Requests'}</span>
           {pendingDepositRequests.length > 0 ? (
             <span
-              className={`text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse ${
+              className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-2xs ${
                 activeTab === 'deposit_requests'
                   ? 'bg-amber-400 text-slate-950'
                   : 'bg-rose-600 text-white'
@@ -1147,55 +1328,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {pendingDepositRequests.length} নতুন
             </span>
           ) : (
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-600">
+            <span
+              className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                activeTab === 'deposit_requests' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
               {allDepositRequests.length}
             </span>
           )}
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'deposit_requests'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-purple-50 text-purple-700'
+            }`}
+          >
+            <Banknote className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'জমা রিকোয়েস্ট' : 'Deposits'}
+          </span>
         </button>
 
+        {/* Box 9: Transactions */}
         <button
+          type="button"
           onClick={() => setActiveTab('transactions')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'transactions'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Receipt className="w-4 h-4" />
-          <span>{language === 'bn' ? 'সকল পেমেন্ট ও ট্রানজাকশন' : 'Transactions'}</span>
           <span
-            className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-              activeTab === 'transactions'
-                ? 'bg-white text-slate-900'
-                : 'bg-slate-200 text-slate-600'
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'transactions' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
             }`}
           >
             {allTransactions.length}
           </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'transactions'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            <Receipt className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'ট্রানজাকশন' : 'Transactions'}
+          </span>
         </button>
 
+        {/* Box 10: Areas & Unions */}
         <button
+          type="button"
           onClick={() => setActiveTab('areas')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'areas'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Building className="w-4 h-4" />
-          <span>{language === 'bn' ? `এরিয়া ও ইউনিয়ন (${markets.length} থানা / ${unions.length} ইউনিয়ন)` : `Areas & Unions (${markets.length} Thanas / ${unions.length} Unions)`}</span>
+          <span
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'areas' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {markets.length}
+          </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'areas'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-cyan-50 text-cyan-700'
+            }`}
+          >
+            <Building className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'এরিয়া ও ইউনিয়ন' : 'Areas & Unions'}
+          </span>
         </button>
 
+        {/* Box 11: Product Catalog */}
         <button
+          type="button"
           onClick={() => setActiveTab('products')}
-          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
             activeTab === 'products'
-              ? 'bg-emerald-700 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
           }`}
         >
-          <Package className="w-4 h-4" />
-          <span>{language === 'bn' ? 'প্রোডাক্ট ক্যাটালগ' : 'Product Catalog'} ({products.length})</span>
+          <span
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'products' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {products.length}
+          </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'products'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <Package className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'প্রোডাক্ট ক্যাটালগ' : 'Products'}
+          </span>
+        </button>
+
+        {/* Box 12: Outlet (সবার নিচে ৩য় লাইনের ৩য় বক্স Outlet) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('outlet')}
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
+            activeTab === 'outlet'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
+          }`}
+        >
+          <span
+            className={`absolute top-1.5 right-1.5 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'outlet' ? 'bg-emerald-900 text-white' : 'bg-amber-100 text-amber-800 font-bold'
+            }`}
+          >
+            {outlets.length}
+          </span>
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'outlet'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            <Store className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            Outlet
+          </span>
         </button>
       </div>
 
@@ -4117,6 +4393,368 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: OUTLET (আউটলেট ও হাব নেটওয়ার্ক) */}
+      {activeTab === 'outlet' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header & Controls */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-amber-100 text-amber-800">
+                  <Store className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {language === 'bn' ? 'আউটলেট ও হাব নেটওয়ার্ক (Outlet)' : 'Outlets & Physical Hub Network'}
+                </h2>
+                <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  {outlets.length} টি আউটলেট
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'কালীগঞ্জ ও কাপাসিয়ার আঞ্চলিক ডিস্ট্রিবিউশন হাব, কালেকশন পয়েন্ট এবং ইন-চার্জ বিবরণ'
+                  : 'Regional delivery depots, collection hubs, and management contacts across thanas'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[220px]">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={language === 'bn' ? 'আউটলেট, এলাকা বা ইন-চার্জ খুঁজুন...' : 'Search outlet, area, or manager...'}
+                  value={outletSearch}
+                  onChange={(e) => setOutletSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-medium focus:bg-white focus:outline-emerald-600"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddOutletModal(true)}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{language === 'bn' ? 'নতুন আউটলেট' : 'Add Outlet'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] text-slate-500 font-medium block mb-1">মোট আউটলেট</span>
+              <span className="text-xl font-black text-slate-900">{outlets.length} টি</span>
+              <span className="text-[10px] text-emerald-700 block mt-0.5 font-bold">কালীগঞ্জ ও কাপাসিয়া</span>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] text-slate-500 font-medium block mb-1">সক্রিয় হাব</span>
+              <span className="text-xl font-black text-emerald-700">
+                {outlets.filter((o) => o.status === 'active').length} টি
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">১০০% অপারেশনাল</span>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] text-slate-500 font-medium block mb-1">দৈনিক ডিসপ্যাচ</span>
+              <span className="text-xl font-black text-amber-700">
+                {outlets.reduce((acc, o) => acc + (o.dailyDispatch || 0), 0)} টি
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">গড় পার্সেল হ্যান্ডলিং</span>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] text-slate-500 font-medium block mb-1">ইউনিয়ন কভারেজ</span>
+              <span className="text-xl font-black text-blue-700">{unions.length} টি</span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">ডোরস্টেপ ডেলিভারি</span>
+            </div>
+          </div>
+
+          {/* Outlet Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {outlets
+              .filter((o) => {
+                if (!outletSearch.trim()) return true;
+                const q = outletSearch.toLowerCase();
+                return (
+                  o.nameBn.toLowerCase().includes(q) ||
+                  o.nameEn.toLowerCase().includes(q) ||
+                  o.managerName.toLowerCase().includes(q) ||
+                  o.phone.includes(q) ||
+                  o.thanaNameBn.toLowerCase().includes(q)
+                );
+              })
+              .map((outlet) => (
+                <div
+                  key={outlet.id}
+                  className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Top title & badge */}
+                    <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100 mb-3">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0 shadow-2xs">
+                          <Store className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm leading-tight">
+                            {outlet.nameBn}
+                          </h3>
+                          <span className="text-[10px] text-slate-400 font-medium block">
+                            {outlet.hubType}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${
+                          outlet.status === 'active'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border border-rose-200'
+                        }`}
+                      >
+                        {outlet.status === 'active' ? 'সক্রিয় / চালু' : 'সাময়িক বন্ধ'}
+                      </span>
+                    </div>
+
+                    {/* Details */}
+                    <div className="space-y-2 text-xs text-slate-600 mb-4">
+                      <div className="flex items-start gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                        <span className="text-[11px] leading-snug font-medium text-slate-700">
+                          {outlet.addressBn} ({outlet.thanaNameBn} থানা)
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block font-medium">ইন-চার্জ / ম্যানেজার</span>
+                          <span className="font-bold text-slate-900 text-xs">{outlet.managerName}</span>
+                        </div>
+                        <a
+                          href={`tel:${outlet.phone}`}
+                          className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold px-2 py-1 rounded-lg text-[11px] flex items-center gap-1 font-mono transition-colors"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>{outlet.phone}</span>
+                        </a>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 text-[11px]">
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>সময়সূচি:</span>
+                        </span>
+                        <span className="font-semibold text-slate-800">{outlet.timing}</span>
+                      </div>
+
+                      {/* Coverage Unions Tags */}
+                      <div className="pt-2 border-t border-slate-100">
+                        <span className="text-[10px] text-slate-400 block mb-1 font-medium">কভার করা ইউনিয়নসমূহ:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {outlet.coverageUnions.map((uName, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium"
+                            >
+                              {uName}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOutlets(
+                          outlets.map((o) =>
+                            o.id === outlet.id
+                              ? { ...o, status: o.status === 'active' ? 'paused' : 'active' }
+                              : o
+                          )
+                        );
+                      }}
+                      className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
+                        outlet.status === 'active'
+                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                      }`}
+                    >
+                      {outlet.status === 'active' ? 'পজ করুন' : 'চালু করুন'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`আপনি কি "${outlet.nameBn}" আউটলেটটি মুছে ফেলতে চান?`)) {
+                          setOutlets(outlets.filter((o) => o.id !== outlet.id));
+                        }
+                      }}
+                      className="p-1.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
+                      title="মুছে ফেলুন"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD OUTLET */}
+      {showAddOutletModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <Store className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm">নতুন আউটলেট ও হাব যুক্ত করুন</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddOutletModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newOutletNameBn.trim()) return;
+                const newOutlet = {
+                  id: `outlet-${Date.now()}`,
+                  nameBn: newOutletNameBn.trim(),
+                  nameEn: newOutletNameEn.trim() || newOutletNameBn.trim(),
+                  hubType: 'লোকাল ডিস্ট্রিবিউশন হাব',
+                  thanaId: newOutletThana,
+                  thanaNameBn: markets.find((m) => m.id === newOutletThana)?.nameBn || newOutletThana,
+                  addressBn: newOutletAddressBn.trim() || 'বাজার মেইন রোড, গাজীপুর',
+                  managerName: newOutletManager.trim() || 'শাখা ইন-চার্জ',
+                  phone: newOutletPhone.trim() || '01700-000000',
+                  coverageUnions: unions.filter((u) => u.thanaId === newOutletThana).map((u) => u.nameBn).slice(0, 4),
+                  timing: newOutletTiming.trim() || 'সকাল ৮:০০ - রাত ৯:০০',
+                  status: 'active',
+                  staffCount: 3,
+                  dailyDispatch: 0,
+                };
+                setOutlets([newOutlet, ...outlets]);
+                setShowAddOutletModal(false);
+                setNewOutletNameBn('');
+                setNewOutletNameEn('');
+                setNewOutletAddressBn('');
+                setNewOutletManager('');
+                setNewOutletPhone('');
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  আউটলেটের নাম (বাংলা) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: কালীগঞ্জ উত্তর হাব"
+                  value={newOutletNameBn}
+                  onChange={(e) => setNewOutletNameBn(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  থানা / এরিয়া নির্বাচন করুন
+                </label>
+                <select
+                  value={newOutletThana}
+                  onChange={(e) => setNewOutletThana(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-slate-50"
+                >
+                  {markets.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nameBn} থানা
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  আউটলেটের সুনির্দিষ্ট ঠিকানা <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: থানা মোড়, কাপাসিয়া"
+                  value={newOutletAddressBn}
+                  onChange={(e) => setNewOutletAddressBn(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">ইন-চার্জ / ম্যানেজার নাম</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ম্যানেজার নাম"
+                    value={newOutletManager}
+                    onChange={(e) => setNewOutletManager(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">মোবাইল নম্বর</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="017XXXXXXXX"
+                    value={newOutletPhone}
+                    onChange={(e) => setNewOutletPhone(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">কার্যক্রমের সময়সূচি</label>
+                <input
+                  type="text"
+                  placeholder="যেমন: সকাল ৭:০০ - রাত ১০:০০"
+                  value={newOutletTiming}
+                  onChange={(e) => setNewOutletTiming(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  আউটলেট সংরক্ষণ করুন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddOutletModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
