@@ -1410,6 +1410,11 @@ function MarketplaceMain() {
             {currentPage === 'orders' && (
               <OrdersPage
                 orders={orders}
+                loggedInCustomer={loggedInCustomer}
+                onNavigateToLogin={() => {
+                  setCurrentPage('login');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 onBackToShop={() => {
                   setCurrentPage('catalog');
                   window.scrollTo({ top: 0, behavior: 'smooth' });

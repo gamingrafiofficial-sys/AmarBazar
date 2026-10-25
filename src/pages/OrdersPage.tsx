@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Order } from '../types';
+import { Order, CustomerAccount } from '../types';
 import { useLanguage } from '../hooks/useLanguage';
+import { normalizePhone } from '../lib/phone';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { OrderChatModal } from '../components/common/OrderChatModal';
 import { OrderNoteSection } from '../components/common/OrderNoteSection';
@@ -18,10 +19,14 @@ import {
   HelpCircle,
   Clock,
   MessageSquare,
+  Lock,
+  LogIn,
 } from 'lucide-react';
 
 interface OrdersPageProps {
   orders: Order[];
+  loggedInCustomer?: CustomerAccount | null;
+  onNavigateToLogin?: () => void;
   onBackToShop: () => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<void>;
   onSendMessage?: (orderId: string, text: string) => Promise<void>;
@@ -30,6 +35,8 @@ interface OrdersPageProps {
 
 export const OrdersPage: React.FC<OrdersPageProps> = ({
   orders,
+  loggedInCustomer,
+  onNavigateToLogin,
   onBackToShop,
   onCancelOrder,
   onSendMessage,
@@ -60,16 +67,29 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
     );
   }, [orders]);
 
-  const [selectedMemoOrder, setSelectedMemoOrder] = useState<Order | null>(uniqueOrders[0] || null);
+  // Filter orders strictly for the logged-in customer (guests see NO order data)
+  const userOrders = React.useMemo(() => {
+    if (!loggedInCustomer || !loggedInCustomer.phone) return [];
+    const normCustPhone = normalizePhone(loggedInCustomer.phone);
+    return uniqueOrders.filter((o) => {
+      const normOrderPhone = normalizePhone(o.customerPhone);
+      return (
+        (normCustPhone && normOrderPhone && normCustPhone === normOrderPhone) ||
+        (o.customerId && o.customerId === loggedInCustomer.id)
+      );
+    });
+  }, [uniqueOrders, loggedInCustomer]);
+
+  const [selectedMemoOrder, setSelectedMemoOrder] = useState<Order | null>(userOrders[0] || null);
   const [activeTab, setActiveTab] = useState<'list' | 'memo'>('list');
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
 
   // Sync selectedMemoOrder if orders change
   React.useEffect(() => {
-    if (uniqueOrders.length > 0 && (!selectedMemoOrder || !uniqueOrders.some((o) => o.id === selectedMemoOrder.id))) {
-      setSelectedMemoOrder(uniqueOrders[0]);
+    if (userOrders.length > 0 && (!selectedMemoOrder || !userOrders.some((o) => o.id === selectedMemoOrder.id))) {
+      setSelectedMemoOrder(userOrders[0]);
     }
-  }, [uniqueOrders, selectedMemoOrder]);
+  }, [userOrders, selectedMemoOrder]);
 
   // Cancel prompt
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -90,6 +110,46 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
     setCancelOrderId(null);
     setCancelReason('');
   };
+
+  // If user is NOT logged in, show login required gate (NO data exposed)
+  if (!loggedInCustomer) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center animate-in fade-in duration-200">
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto mb-4 border border-emerald-200 shadow-2xs">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900 mb-1.5">
+            {language === 'bn' ? 'অর্ডার দেখতে লগইন করুন' : 'Login to View Your Orders'}
+          </h2>
+          <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+            {language === 'bn'
+              ? 'আপনার অ্যাকাউন্টের পূর্ববর্তী অর্ডারসমূহ, লাইভ ডেলিভারি ট্র্যাকিং ও অফিসিয়াল ক্যাশ মেমো দেখতে অনুগ্রহ করে লগইন করুন।'
+              : 'Please log in to your account to view your orders, live tracking status, and official cash memos.'}
+          </p>
+          <div className="space-y-2.5">
+            {onNavigateToLogin && (
+              <button
+                type="button"
+                onClick={onNavigateToLogin}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-6 rounded-2xl text-xs transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{language === 'bn' ? 'লগইন বা অ্যাকাউন্ট খুলুন' : 'Login or Register'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onBackToShop}
+              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold py-2.5 px-6 rounded-2xl text-xs transition-colors border border-slate-200 cursor-pointer"
+            >
+              {language === 'bn' ? 'শপে ফিরে যান' : 'Back to Shop'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 animate-in fade-in duration-200">
@@ -120,7 +180,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {language === 'bn' ? `অর্ডার তালিকা (${uniqueOrders.length})` : `Order List (${uniqueOrders.length})`}
+            {language === 'bn' ? `অর্ডার তালিকা (${userOrders.length})` : `Order List (${userOrders.length})`}
           </button>
 
           {selectedMemoOrder && (
@@ -151,7 +211,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
         </div>
       </div>
 
-      {uniqueOrders.length === 0 ? (
+      {userOrders.length === 0 ? (
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-md mx-auto my-8">
           <Package className="w-16 h-16 text-slate-300 mx-auto mb-3 stroke-1" />
           <h3 className="font-bold text-slate-800 text-base mb-1">
@@ -353,7 +413,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
       ) : (
         /* TAB 1: ALL ORDERS LIST */
         <div className="space-y-4 max-w-4xl mx-auto">
-          {uniqueOrders.map((order, idx) => (
+          {userOrders.map((order, idx) => (
             <div
               key={`${order.id}-${idx}`}
               className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-xs hover:shadow-md transition-shadow"
