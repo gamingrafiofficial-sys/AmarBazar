@@ -200,10 +200,52 @@ export interface Order {
   rejectionReason?: string;
   failureReason?: string;
   cancellationReason?: string;
+  isRiderCancelled?: boolean;
+  riderCancelReason?: string;
+  cancelledByRiderId?: string;
+  cancelledByRiderName?: string;
+  cancelledByRiderPhone?: string;
+  riderCancelledAt?: string;
+  isFakeOrder?: boolean;
+  fakeOrderReason?: string;
+  fakeOrderMarkedAt?: string;
   notes?: string;
   messages?: OrderMessage[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type DepositRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RiderDepositRequest {
+  id: string;
+  riderId: string;
+  riderName: string;
+  riderPhone: string;
+  amount: number;
+  status: DepositRequestStatus;
+  notes?: string;
+  adminNotes?: string;
+  orderIds?: string[];
+  createdAt: string;
+  processedAt?: string;
+  processedBy?: string;
+  voucherId?: string;
+}
+
+export interface PaymentTransactionRecord {
+  id: string;
+  riderId: string;
+  riderName: string;
+  riderPhone: string;
+  type: 'deposit_handover' | 'rejection_adjustment';
+  amount: number;
+  status: 'approved' | 'rejected' | 'pending';
+  notes?: string;
+  adminNotes?: string;
+  createdAt: string;
+  processedAt?: string;
+  orderIds?: string[];
 }
 
 export interface OrderMessage {

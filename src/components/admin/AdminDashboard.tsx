@@ -7,6 +7,8 @@ import {
   Category,
   ProductUnit,
   UnionArea,
+  RiderDepositRequest,
+  PaymentTransactionRecord,
 } from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
@@ -55,6 +57,14 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowUpRight,
+  XCircle,
+  CreditCard,
+  ArrowDownLeft,
+  Receipt,
+  CheckCheck,
+  RefreshCw,
+  UserCheck,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -64,6 +74,8 @@ interface AdminDashboardProps {
   categories: Category[];
   registeredRiders: DeliveryRiderAccount[];
   unions?: UnionArea[];
+  depositRequests?: RiderDepositRequest[];
+  paymentTransactions?: PaymentTransactionRecord[];
   onAddProduct: (prod: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateProduct?: (prodId: string, updates: Partial<Product>) => void;
   onToggleProductPrivate?: (prodId: string, isPrivate: boolean) => void;
@@ -75,6 +87,9 @@ interface AdminDashboardProps {
   onUpdateRiderUnions?: (riderId: string, assignedUnionIds: string[]) => void;
   onToggleRiderActive?: (riderId: string, isActive: boolean, reason?: string) => Promise<void> | void;
   onRecordHandover?: (riderId: string, amount: number, notes?: string) => Promise<void> | void;
+  onApproveDeposit?: (requestId: string, adminNotes?: string) => Promise<void> | void;
+  onRejectDeposit?: (requestId: string, adminNotes?: string) => Promise<void> | void;
+  onMarkFakeOrder?: (orderId: string, reason: string) => Promise<void> | void;
   onSendMessage?: (orderId: string, text: string) => Promise<void>;
   onUpdateOrderNote?: (orderId: string, notes: string) => Promise<void>;
   onLogout?: () => void;
@@ -87,6 +102,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   categories,
   registeredRiders,
   unions = SEED_UNIONS,
+  depositRequests = [],
+  paymentTransactions = [],
   onAddProduct,
   onUpdateProduct,
   onToggleProductPrivate,
@@ -98,6 +115,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateRiderUnions,
   onToggleRiderActive,
   onRecordHandover,
+  onApproveDeposit,
+  onRejectDeposit,
+  onMarkFakeOrder,
   onSendMessage,
   onUpdateOrderNote,
   onLogout,
@@ -127,7 +147,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }, [inputOrders]);
 
-  const [activeTab, setActiveTab] = useState<'summary' | 'new_orders' | 'all_orders' | 'rider_balances' | 'products' | 'areas' | 'riders'>('summary');
+  const [activeTab, setActiveTab] = useState<
+    | 'summary'
+    | 'new_orders'
+    | 'all_orders'
+    | 'rider_balances'
+    | 'products'
+    | 'areas'
+    | 'riders'
+    | 'rider_cancelled'
+    | 'fake_orders'
+    | 'deposit_requests'
+    | 'transactions'
+  >('summary');
+
+  // Rider Cancelled & Fake Order State
+  const [riderCancelledSearch, setRiderCancelledSearch] = useState('');
+  const [fakeOrderSearch, setFakeOrderSearch] = useState('');
+  const [reassignModalOrder, setReassignModalOrder] = useState<Order | null>(null);
+  const [reassignRiderId, setReassignRiderId] = useState<string>('');
+  const [markFakeModalOrder, setMarkFakeModalOrder] = useState<Order | null>(null);
+  const [markFakeReasonInput, setMarkFakeReasonInput] = useState<string>('গ্রাহকের সাথে কথা বলে নিশ্চিত হওয়া গেছে এটি ফেক/অসত্য অর্ডার');
+
+  // Deposit Request Verification & Approval State
+  const [depositSearch, setDepositSearch] = useState('');
+  const [depositFilterStatus, setDepositFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [approvingDeposit, setApprovingDeposit] = useState<RiderDepositRequest | null>(null);
+  const [approveNoteInput, setApproveNoteInput] = useState<string>('অফিসে নগদ ক্যাশ টাকা বুঝে গ্রহণ করা হয়েছে');
+  const [rejectingDeposit, setRejectingDeposit] = useState<RiderDepositRequest | null>(null);
+  const [rejectNoteInput, setRejectNoteInput] = useState<string>('টাকা অফিসে জমা পাওয়া যায়নি বা পরিমাপে গরমিল রয়েছে');
+
+  // Transactions State
+  const [txSearch, setTxSearch] = useState('');
 
   // Summary Overview State & Filtering
   const [summaryTimeFilter, setSummaryTimeFilter] = useState<'today' | 'month' | 'all'>('all');
@@ -297,6 +348,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (o.unionNameBn && o.unionNameBn.includes(orderSearch));
 
     return matchStatus && matchThana && matchUnion && matchSearch;
+  });
+
+  // Rider Cancelled Orders & Fake Orders Lists
+  const riderCancelledOrders = orders.filter((o) => o.isRiderCancelled && !o.isFakeOrder);
+  const fakeOrders = orders.filter((o) => o.isFakeOrder);
+
+  // Filtered Rider Cancelled Orders
+  const filteredRiderCancelledOrders = riderCancelledOrders.filter((o) => {
+    if (!riderCancelledSearch.trim()) return true;
+    const q = riderCancelledSearch.toLowerCase().trim();
+    return (
+      o.id.toLowerCase().includes(q) ||
+      o.customerName.toLowerCase().includes(q) ||
+      o.customerPhone.includes(q) ||
+      (o.cancelledByRiderName && o.cancelledByRiderName.toLowerCase().includes(q)) ||
+      (o.cancelledByRiderPhone && o.cancelledByRiderPhone.includes(q)) ||
+      (o.riderCancelReason && o.riderCancelReason.toLowerCase().includes(q))
+    );
+  });
+
+  // Filtered Fake Orders
+  const filteredFakeOrders = fakeOrders.filter((o) => {
+    if (!fakeOrderSearch.trim()) return true;
+    const q = fakeOrderSearch.toLowerCase().trim();
+    return (
+      o.id.toLowerCase().includes(q) ||
+      o.customerName.toLowerCase().includes(q) ||
+      o.customerPhone.includes(q) ||
+      (o.fakeOrderReason && o.fakeOrderReason.toLowerCase().includes(q))
+    );
+  });
+
+  // Deposit Requests & Transactions Lists
+  const allDepositRequests = depositRequests || [];
+  const pendingDepositRequests = allDepositRequests.filter((d) => d.status === 'pending');
+
+  const filteredDepositRequests = allDepositRequests.filter((d) => {
+    const matchStatus = depositFilterStatus === 'all' || d.status === depositFilterStatus;
+    if (!matchStatus) return false;
+    if (!depositSearch.trim()) return true;
+    const q = depositSearch.toLowerCase().trim();
+    return (
+      d.id.toLowerCase().includes(q) ||
+      d.riderName.toLowerCase().includes(q) ||
+      d.riderPhone.includes(q) ||
+      (d.voucherId && d.voucherId.toLowerCase().includes(q)) ||
+      (d.notes && d.notes.toLowerCase().includes(q)) ||
+      (d.adminNotes && d.adminNotes.toLowerCase().includes(q))
+    );
+  });
+
+  const allTransactions = paymentTransactions || [];
+  const filteredTransactions = allTransactions.filter((tx) => {
+    if (!txSearch.trim()) return true;
+    const q = txSearch.toLowerCase().trim();
+    return (
+      tx.id.toLowerCase().includes(q) ||
+      tx.riderName.toLowerCase().includes(q) ||
+      tx.riderPhone.includes(q) ||
+      (tx.notes && tx.notes.toLowerCase().includes(q)) ||
+      (tx.adminNotes && tx.adminNotes.toLowerCase().includes(q))
+    );
   });
 
   // Filtered orders for Summary Overview based on Time Range (today, month, all)
@@ -965,6 +1078,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <Bike className="w-4 h-4" />
           <span>{language === 'bn' ? 'রাইডার ম্যানেজমেন্ট' : 'Riders'} ({registeredRiders.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('rider_cancelled')}
+          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'rider_cancelled'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <XCircle className="w-4 h-4 text-amber-500" />
+          <span>{language === 'bn' ? 'রাইডার বাতিলকৃত' : 'Rider Cancelled'}</span>
+          <span
+            className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+              riderCancelledOrders.length > 0
+                ? activeTab === 'rider_cancelled'
+                  ? 'bg-white text-amber-900'
+                  : 'bg-amber-500 text-white'
+                : 'bg-slate-200 text-slate-600'
+            }`}
+          >
+            {riderCancelledOrders.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('fake_orders')}
+          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'fake_orders'
+              ? 'bg-rose-700 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4 text-rose-500" />
+          <span>{language === 'bn' ? 'ফেক অর্ডার তালিকা' : 'Fake Orders'}</span>
+          <span
+            className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+              fakeOrders.length > 0
+                ? activeTab === 'fake_orders'
+                  ? 'bg-white text-rose-900'
+                  : 'bg-rose-500 text-white'
+                : 'bg-slate-200 text-slate-600'
+            }`}
+          >
+            {fakeOrders.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('deposit_requests')}
+          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'deposit_requests'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Banknote className="w-4 h-4" />
+          <span>{language === 'bn' ? 'ক্যাশ জমার রিকোয়েস্ট' : 'Deposit Requests'}</span>
+          {pendingDepositRequests.length > 0 ? (
+            <span
+              className={`text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse ${
+                activeTab === 'deposit_requests'
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-rose-600 text-white'
+              }`}
+            >
+              {pendingDepositRequests.length} নতুন
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-600">
+              {allDepositRequests.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('transactions')}
+          className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'transactions'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Receipt className="w-4 h-4" />
+          <span>{language === 'bn' ? 'সকল পেমেন্ট ও ট্রানজাকশন' : 'Transactions'}</span>
+          <span
+            className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+              activeTab === 'transactions'
+                ? 'bg-white text-slate-900'
+                : 'bg-slate-200 text-slate-600'
+            }`}
+          >
+            {allTransactions.length}
+          </span>
         </button>
 
         <button
@@ -3308,6 +3515,611 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* TAB: RIDER CANCELLED ORDERS (রাইডার বাতিলকৃত অর্ডার) */}
+      {activeTab === 'rider_cancelled' && (
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-amber-100 text-amber-800">
+                  <XCircle className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {language === 'bn' ? 'রাইডার বাতিলকৃত অর্ডারসমূহ' : 'Rider Cancelled Orders'}
+                </h2>
+                <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  {riderCancelledOrders.length} টি
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'যেসব অর্ডার কোনো রাইডার প্রথমে গ্রহণ করে পরবর্তীতে ছেড়ে দিয়েছেন বা বাতিল করেছেন। এখান থেকে অন্য রাইডার অ্যাসাইন করুন বা ফেক অর্ডার হলে ফেক তালিকায় পাঠান।'
+                  : 'Orders initially accepted by a rider and later released/cancelled. Reassign to another rider or mark as fake.'}
+              </p>
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder={language === 'bn' ? 'অর্ডার ID, কাস্টমার বা রাইডার খুঁজুন...' : 'Search order, customer, or rider...'}
+                value={riderCancelledSearch}
+                onChange={(e) => setRiderCancelledSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-medium focus:bg-white focus:outline-emerald-600"
+              />
+            </div>
+          </div>
+
+          {filteredRiderCancelledOrders.length === 0 ? (
+            <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center text-slate-400 text-xs">
+              {riderCancelledSearch.trim()
+                ? 'অনুসন্ধানের সাথে মেলে এমন কোনো বাতিলকৃত অর্ডার পাওয়া যায়নি।'
+                : 'এই মুহূর্তে কোনো রাইডার বাতিলকৃত অর্ডার নেই। সব অর্ডার স্বাভাবিক গতিতে চলছে।'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {filteredRiderCancelledOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-3xl border-2 border-amber-300 p-5 shadow-xs flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Header: ID, Badge, Amount */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono text-sm font-black text-slate-900">
+                          #{order.id}
+                        </span>
+                        <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                          রাইডার ছেড়ে দিয়েছেন
+                        </span>
+                        {order.unionNameBn && (
+                          <span className="bg-emerald-50 text-emerald-800 text-xs px-2 py-0.5 rounded-md font-semibold border border-emerald-200">
+                            {order.unionNameBn}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 block">মোট মূল্য</span>
+                        <span className="font-mono font-black text-base text-emerald-800">
+                          {formatBDT(order.totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Rider Cancellation Reason Box */}
+                    <div className="my-3 p-3.5 bg-amber-50 rounded-2xl border border-amber-200/90 text-xs space-y-1 text-amber-950">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          <span>বাতিলকারী রাইডার: {order.cancelledByRiderName || 'রাইডার'}</span>
+                          {order.cancelledByRiderPhone && (
+                            <a
+                              href={`tel:${order.cancelledByRiderPhone}`}
+                              className="text-amber-800 underline font-mono text-[11px]"
+                            >
+                              ({order.cancelledByRiderPhone})
+                            </a>
+                          )}
+                        </span>
+                        {order.riderCancelledAt && (
+                          <span className="text-[10px] text-amber-800">
+                            {new Date(order.riderCancelledAt).toLocaleString('bn-BD', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-amber-900 pt-1">
+                        <strong>বাতিল করার কারণ: </strong>
+                        <span className="font-semibold text-rose-900">{order.riderCancelReason || 'কোনো কারণ উল্লেখ করা হয়নি'}</span>
+                      </p>
+                    </div>
+
+                    {/* Customer Info & Order Items */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs mb-3">
+                      <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-700 block">কাস্টমার তথ্য:</span>
+                        <p className="font-bold text-slate-900">{order.customerName}</p>
+                        <p className="text-slate-600">ফোন: <span className="font-mono font-semibold">{order.customerPhone}</span></p>
+                        <p className="text-slate-600">ঠিকানা: {order.deliveryAddress}</p>
+                      </div>
+
+                      <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                        <span className="font-bold text-slate-700 block">অর্ডারের পণ্যসমূহ ({order.items.length}টি):</span>
+                        <div className="max-h-20 overflow-y-auto space-y-1 pr-1">
+                          {order.items.map((it) => (
+                            <div key={it.productId} className="flex justify-between text-slate-600 text-[11px]">
+                              <span>{it.nameBn} x {it.quantity} {it.unit}</span>
+                              <span className="font-mono font-semibold">{formatBDT(it.lineTotal)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReassignModalOrder(order);
+                        setReassignRiderId('');
+                      }}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4" />
+                      <span>অন্য রাইডার অ্যাসাইন করুন</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMarkFakeModalOrder(order);
+                        setMarkFakeReasonInput('গ্রাহকের সাথে কথা বলে নিশ্চিত হওয়া গেছে এটি ফেক/অসত্য অর্ডার');
+                      }}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                      <span>ফেক অর্ডার ঘোষণা করুন</span>
+                    </button>
+
+                    {order.cancelledByRiderPhone && (
+                      <a
+                        href={`tel:${order.cancelledByRiderPhone}`}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center gap-1.5 border border-slate-200 transition-colors"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-slate-600" />
+                        <span>রাইডারের সাথে কথা বলুন</span>
+                      </a>
+                    )}
+
+                    <a
+                      href={`tel:${order.customerPhone}`}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center gap-1.5 border border-slate-200 transition-colors"
+                    >
+                      <Phone className="w-3.5 h-3.5 text-slate-600" />
+                      <span>কাস্টমারকে কল</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveChatOrder(order)}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold py-2.5 px-3.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                      <span>মেসেজ</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: FAKE ORDERS LIST (ফেক অর্ডার তালিকা) */}
+      {activeTab === 'fake_orders' && (
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-rose-100 text-rose-800">
+                  <AlertTriangle className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {language === 'bn' ? 'ফেক / প্রতারণামূলক অর্ডার তালিকা' : 'Fake / Fraudulent Orders'}
+                </h2>
+                <span className="bg-rose-100 text-rose-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  {fakeOrders.length} টি
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'কাস্টমার ভেরিফিকেশনের পর চিহ্নিত অসত্য বা ফেক অর্ডার। এগুলো সাধারণ রিপোর্ট ও ডেলিভারি হিসেব থেকে আলাদা রাখা হয়েছে।'
+                  : 'Orders quarantined as fake after verification. Kept separate from valid sales metrics.'}
+              </p>
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder={language === 'bn' ? 'ফেক অর্ডার খুঁজুন...' : 'Search fake orders...'}
+                value={fakeOrderSearch}
+                onChange={(e) => setFakeOrderSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-medium focus:bg-white focus:outline-rose-600"
+              />
+            </div>
+          </div>
+
+          {filteredFakeOrders.length === 0 ? (
+            <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center text-slate-400 text-xs">
+              {fakeOrderSearch.trim()
+                ? 'অনুসন্ধানের সাথে কোনো ফেক অর্ডার মেলেনি।'
+                : 'তালিকায় কোনো ফেক অর্ডার নেই।'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {filteredFakeOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-3xl border-2 border-rose-300 p-5 shadow-xs flex flex-col justify-between"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono text-sm font-black text-slate-900">
+                        #{order.id}
+                      </span>
+                      <span className="bg-rose-100 text-rose-900 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-rose-600" />
+                        <span>ফেক অর্ডার</span>
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-sm text-slate-500 line-through">
+                      মূল্য: {formatBDT(order.totalAmount)}
+                    </span>
+                  </div>
+
+                  <div className="my-3 p-3 bg-rose-50 rounded-2xl border border-rose-200 text-xs text-rose-950 space-y-1">
+                    <p className="font-bold text-rose-900">
+                      চিহ্নিত করার কারণ: <span className="font-normal">{order.fakeOrderReason || 'অসত্য অর্ডার'}</span>
+                    </p>
+                    {order.fakeOrderMarkedAt && (
+                      <p className="text-[10px] text-rose-700">
+                        তারিখ: {new Date(order.fakeOrderMarkedAt).toLocaleString('bn-BD', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-700">
+                    <p>
+                      <strong>কাস্টমার:</strong> {order.customerName} (
+                      <a href={`tel:${order.customerPhone}`} className="text-emerald-700 font-mono font-bold hover:underline">
+                        {order.customerPhone}
+                      </a>
+                      )
+                    </p>
+                    <p>
+                      <strong>ঠিকানা:</strong> {order.deliveryAddress}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: DEPOSIT REQUESTS (ক্যাশ জমার রিকোয়েস্ট) */}
+      {activeTab === 'deposit_requests' && (
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-emerald-100 text-emerald-800">
+                  <Banknote className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {language === 'bn' ? 'রাইডারদের ক্যাশ জমার রিকোয়েস্ট' : 'Rider Cash Deposit Requests'}
+                </h2>
+                {pendingDepositRequests.length > 0 && (
+                  <span className="bg-rose-600 text-white text-xs font-bold px-2.5 py-0.5 rounded-full animate-pulse">
+                    {pendingDepositRequests.length} টি নতুন
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'রাইডার ঢাকা অফিসে টাকা জমা দেওয়ার রিকোয়েস্ট পাঠালে এখানে শো করে। টাকা হাতে বুঝে পেয়ে অনুমোদন দিলে রাইডারের ব্যালেন্স কমে যাবে এবং অফিস মেমো হিস্ট্রিতে সংরক্ষিত হবে।'
+                  : 'Rider cash remittances to office. Approving deducts rider balance, logs payment transaction, and generates official memo.'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs gap-1 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setDepositFilterStatus('all')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    depositFilterStatus === 'all'
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  সব ({allDepositRequests.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDepositFilterStatus('pending')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    depositFilterStatus === 'pending'
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  অপেক্ষমান ({pendingDepositRequests.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDepositFilterStatus('approved')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    depositFilterStatus === 'approved'
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  অনুমোদিত
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDepositFilterStatus('rejected')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                    depositFilterStatus === 'rejected'
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  প্রত্যাখ্যাত
+                </button>
+              </div>
+
+              <div className="relative min-w-[200px]">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="রাইডার বা মেমো খুঁজুন..."
+                  value={depositSearch}
+                  onChange={(e) => setDepositSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-medium focus:bg-white focus:outline-emerald-600"
+                />
+              </div>
+            </div>
+          </div>
+
+          {filteredDepositRequests.length === 0 ? (
+            <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center text-slate-400 text-xs">
+              কোনো জমার রিকোয়েস্ট পাওয়া যায়নি।
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredDepositRequests.map((req) => {
+                const riderCurrentMetrics = getRiderMetrics(req.riderId);
+
+                return (
+                  <div
+                    key={req.id}
+                    className={`bg-white rounded-3xl p-5 border-2 shadow-xs flex flex-col justify-between ${
+                      req.status === 'pending'
+                        ? 'border-amber-400 bg-amber-50/20'
+                        : req.status === 'approved'
+                        ? 'border-emerald-200'
+                        : 'border-rose-200'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100 mb-3 flex-wrap">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-mono text-xs font-bold text-slate-700">
+                            #{req.id}
+                          </span>
+                          {req.status === 'pending' && (
+                            <span className="bg-amber-100 text-amber-900 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                              <span>অপেক্ষমান</span>
+                            </span>
+                          )}
+                          {req.status === 'approved' && (
+                            <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <CheckCheck className="w-3 h-3 text-emerald-700" />
+                              <span>অনুমোদিত</span>
+                            </span>
+                          )}
+                          {req.status === 'rejected' && (
+                            <span className="bg-rose-100 text-rose-900 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <XCircle className="w-3 h-3 text-rose-700" />
+                              <span>প্রত্যাখ্যাত</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">জমার রিকোয়েস্ট</span>
+                          <span className="font-mono font-black text-lg text-emerald-800">
+                            {formatBDT(req.amount)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs text-slate-700 mb-3">
+                        <p className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900">{req.riderName}</span>
+                          <a
+                            href={`tel:${req.riderPhone}`}
+                            className="text-emerald-700 font-mono font-bold hover:underline flex items-center gap-1"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>{req.riderPhone}</span>
+                          </a>
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          বর্তমানে রাইডারের হাতে বকেয়া ক্যাশ: <strong className="font-mono font-bold text-slate-900">{formatBDT(riderCurrentMetrics.cashBalance)}</strong>
+                        </p>
+                        {req.notes && (
+                          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-800">
+                            <strong>রাইডার নোট:</strong> {req.notes}
+                          </div>
+                        )}
+                        {req.adminNotes && (
+                          <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-950">
+                            <strong>অফিস মন্তব্য:</strong> {req.adminNotes}
+                          </div>
+                        )}
+                        {req.voucherId && (
+                          <p className="text-[11px] text-blue-800 font-mono font-bold">
+                            অফিস মেমো নং: {req.voucherId}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          রিকোয়েস্ট তারিখ: {new Date(req.createdAt).toLocaleString('bn-BD', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {req.status === 'pending' && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setApprovingDeposit(req);
+                            setApproveNoteInput('অফিসে নগদ ক্যাশ টাকা বুঝে গ্রহণ করা হয়েছে');
+                          }}
+                          className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        >
+                          <CheckCheck className="w-4 h-4" />
+                          <span>টাকা বুঝে পেয়েছি (অনুমোদন)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectingDeposit(req);
+                            setRejectNoteInput('টাকা অফিসে জমা পাওয়া যায়নি বা পরিমাপে গরমিল রয়েছে');
+                          }}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <XCircle className="w-4 h-4 text-rose-600" />
+                          <span>প্রত্যাখ্যান</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: TRANSACTIONS & MEMOS (সকল পেমেন্ট ও ট্রানজাকশন) */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-4">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-emerald-100 text-emerald-800">
+                  <Receipt className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {language === 'bn' ? 'সকল পেমেন্ট ও রাইডার ট্রানজাকশন লেজার' : 'Payment Ledger & Voucher Memos'}
+                </h2>
+                <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  {allTransactions.length} টি রেকর্ড
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'ডাটাবেজে সংরক্ষিত প্রতিটি রাইডার ক্যাশ ডিপোজিট, অনুমোদন এবং ব্যালেন্স সমন্বয়ের ভাউচার মেমো'
+                  : 'Real-time database ledger of all cash deposit vouchers, approvals, and adjustments'}
+              </p>
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder="মেমো নং, রাইডার বা ফোন খুঁজুন..."
+                value={txSearch}
+                onChange={(e) => setTxSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-medium focus:bg-white focus:outline-emerald-600"
+              />
+            </div>
+          </div>
+
+          {filteredTransactions.length === 0 ? (
+            <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center text-slate-400 text-xs">
+              কোনো ট্রানজাকশন রেকর্ড পাওয়া যায়নি।
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="bg-slate-50 text-slate-900 font-bold border-b border-slate-200 text-[11px]">
+                    <tr>
+                      <th className="py-3 px-4">মেমো / ভাউচার ID</th>
+                      <th className="py-3 px-4">তারিখ ও সময়</th>
+                      <th className="py-3 px-4">রাইডার বিবরণ</th>
+                      <th className="py-3 px-4">ট্রানজাকশন ধরন</th>
+                      <th className="py-3 px-4 text-right">পরিমাণ (৳)</th>
+                      <th className="py-3 px-4">স্ট্যাটাস</th>
+                      <th className="py-3 px-4">অফিস মন্তব্য / মেমো নোট</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredTransactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-4 font-mono font-black text-slate-900">
+                          {tx.id}
+                        </td>
+                        <td className="py-3 px-4 text-[11px] text-slate-500">
+                          {new Date(tx.processedAt || tx.createdAt).toLocaleString('bn-BD', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-slate-900 block">{tx.riderName}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{tx.riderPhone}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {tx.type === 'deposit_handover' ? (
+                            <span className="bg-emerald-50 text-emerald-800 text-[11px] font-bold px-2 py-0.5 rounded-md border border-emerald-200">
+                              অফিস ক্যাশ ডিপোজিট
+                            </span>
+                          ) : (
+                            <span className="bg-rose-50 text-rose-800 text-[11px] font-bold px-2 py-0.5 rounded-md border border-rose-200">
+                              ব্যালেন্স সমন্বয়
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-sm">
+                          {tx.status === 'approved' ? (
+                            <span className="text-emerald-700">+{formatBDT(tx.amount)}</span>
+                          ) : (
+                            <span className="text-rose-700">৳0 (বাতিল)</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {tx.status === 'approved' ? (
+                            <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                              অনুমোদিত
+                            </span>
+                          ) : (
+                            <span className="bg-rose-100 text-rose-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                              প্রত্যাখ্যাত
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-[11px] text-slate-700">
+                          {tx.adminNotes || tx.notes || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* MODAL: REGISTER RIDER (Multi-Union Checkboxes & Thana Selection) */}
       {showRegisterRiderModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
@@ -4308,6 +5120,289 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REASSIGN RIDER (রাইডার পরিবর্তন / নতুন রাইডার অ্যাসাইন) */}
+      {reassignModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">নতুন রাইডার অ্যাসাইন করুন</h3>
+                <p className="text-[11px] text-slate-500 font-mono">অর্ডার: #{reassignModalOrder.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReassignModalOrder(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                <p className="text-slate-700">
+                  <strong>গ্রাহক:</strong> {reassignModalOrder.customerName} ({reassignModalOrder.customerPhone})
+                </p>
+                <p className="text-slate-600">
+                  <strong>ঠিকানা:</strong> {reassignModalOrder.deliveryAddress}
+                </p>
+                <p className="text-slate-600">
+                  <strong>এরিয়া/ইউনিয়ন:</strong> {reassignModalOrder.unionNameBn || reassignModalOrder.thanaNameBn || '—'}
+                </p>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  কোন রাইডারকে অ্যাসাইন করবেন? <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={reassignRiderId}
+                  onChange={(e) => setReassignRiderId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold bg-white"
+                >
+                  <option value="">-- রাইডার নির্বাচন করুন --</option>
+                  {registeredRiders.map((r) => (
+                    <option key={r.id} value={r.id} disabled={r.isActive === false}>
+                      {r.name} ({r.phone}) {r.area === 'kapasia' ? '• কাপাসিয়া' : '• কালীগঞ্জ'} {r.isActive === false ? '• [ডিঅ্যাক্টিভ]' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={!reassignRiderId}
+                  onClick={async () => {
+                    if (!reassignRiderId || !reassignModalOrder) return;
+                    await onAssignRider(reassignModalOrder.id, reassignRiderId);
+                    setReassignModalOrder(null);
+                    setReassignRiderId('');
+                  }}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  অ্যাসাইন নিশ্চিত করুন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReassignModalOrder(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MARK AS FAKE ORDER (ফেক অর্ডার নিশ্চিতকরণ) */}
+      {markFakeModalOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">ফেক অর্ডার হিসেবে চিহ্নিত করুন</h3>
+                <p className="text-[11px] text-slate-500 font-mono">অর্ডার: #{markFakeModalOrder.id}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200 text-rose-950 space-y-1">
+                <p className="font-bold">⚠️ সতর্কতা:</p>
+                <p className="text-[11px]">
+                  এই অর্ডারটিকে ফেক অর্ডার হিসেবে চিহ্নিত করলে এটি সাধারণ অর্ডার ও রাইডার পুল থেকে সরিয়ে <strong>'ফেক অর্ডার তালিকা'</strong>-তে রাখা হবে।
+                </p>
+                <p className="text-[11px] pt-1">
+                  <strong>গ্রাহক:</strong> {markFakeModalOrder.customerName} ({markFakeModalOrder.customerPhone})
+                </p>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  ফেক অর্ডার হিসেবে চিহ্নিত করার কারণ <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={markFakeReasonInput}
+                  onChange={(e) => setMarkFakeReasonInput(e.target.value)}
+                  placeholder="যেমন: গ্রাহক ফোন রিসিভ করেনি এবং ঠিকানা অস্তিত্বহীন..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={!markFakeReasonInput.trim()}
+                  onClick={async () => {
+                    if (onMarkFakeOrder && markFakeModalOrder) {
+                      await onMarkFakeOrder(markFakeModalOrder.id, markFakeReasonInput.trim());
+                    }
+                    setMarkFakeModalOrder(null);
+                  }}
+                  className="flex-1 bg-rose-700 hover:bg-rose-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  ফেক ঘোষণা নিশ্চিত করুন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarkFakeModalOrder(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: APPROVE DEPOSIT REQUEST (টাকা বুঝে পেয়ে অনুমোদন) */}
+      {approvingDeposit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                <CheckCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">ক্যাশ জমার রিকোয়েস্ট অনুমোদন</h3>
+                <p className="text-[11px] text-slate-500 font-mono">আইডি: #{approvingDeposit.id}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600 font-medium">রাইডার:</span>
+                  <span className="font-bold text-slate-900">{approvingDeposit.riderName} ({approvingDeposit.riderPhone})</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-emerald-200/60">
+                  <span className="text-slate-600 font-medium">জমার পরিমাণ:</span>
+                  <span className="font-mono font-black text-emerald-900 text-base">{formatBDT(approvingDeposit.amount)}</span>
+                </div>
+                {approvingDeposit.notes && (
+                  <p className="text-[11px] text-slate-600 pt-1">
+                    <strong>রাইডার নোট:</strong> {approvingDeposit.notes}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  অফিস অনুমোদন মন্তব্য / মেমো নোট
+                </label>
+                <input
+                  type="text"
+                  value={approveNoteInput}
+                  onChange={(e) => setApproveNoteInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-medium"
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500">
+                ✅ অনুমোদন বাটনে ক্লিক করার সাথে সাথে ডাটাবেজ আপডেট হবে, রাইডারের একাউন্ট ব্যালেন্স কমে যাবে এবং মেমো ভাউচার তৈরি হবে।
+              </p>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onApproveDeposit && approvingDeposit) {
+                      await onApproveDeposit(approvingDeposit.id, approveNoteInput);
+                    }
+                    setApprovingDeposit(null);
+                  }}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  অনুমোদন ও মেমো ইস্যু করুন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setApprovingDeposit(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REJECT DEPOSIT REQUEST (টাকা না পেলে প্রত্যাখ্যান) */}
+      {rejectingDeposit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center shrink-0">
+                <XCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">জমার রিকোয়েস্ট প্রত্যাখ্যান করুন</h3>
+                <p className="text-[11px] text-slate-500 font-mono">আইডি: #{rejectingDeposit.id}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600 font-medium">রাইডার:</span>
+                  <span className="font-bold text-slate-900">{rejectingDeposit.riderName} ({rejectingDeposit.riderPhone})</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-rose-200/60">
+                  <span className="text-slate-600 font-medium">দাবিকৃত পরিমাণ:</span>
+                  <span className="font-mono font-bold text-rose-900">{formatBDT(rejectingDeposit.amount)}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  প্রত্যাখ্যানের সুনির্দিষ্ট কারণ <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={rejectNoteInput}
+                  onChange={(e) => setRejectNoteInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <p className="text-[11px] text-rose-700">
+                ⚠️ এই রিকোয়েস্টটি প্রত্যাখ্যান করলে রাইডারের বকেয়া ক্যাশ ব্যালেন্স হ্রাস পাবে না এবং রাইডার ড্যাশবোর্ডে কারণটি দেখা যাবে।
+              </p>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={!rejectNoteInput.trim()}
+                  onClick={async () => {
+                    if (onRejectDeposit && rejectingDeposit) {
+                      await onRejectDeposit(rejectingDeposit.id, rejectNoteInput.trim());
+                    }
+                    setRejectingDeposit(null);
+                  }}
+                  className="flex-1 bg-rose-700 hover:bg-rose-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  প্রত্যাখ্যান নিশ্চিত করুন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRejectingDeposit(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

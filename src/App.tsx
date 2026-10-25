@@ -5,7 +5,6 @@ import { CartProvider, useCart } from './hooks/useCart';
 import { Navbar } from './components/common/Navbar';
 import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { HeroSlider } from './components/customer/HeroSlider';
-import { AreaSelector } from './components/customer/AreaSelector';
 import { MarketSelector } from './components/customer/MarketSelector';
 import { ProductCard } from './components/customer/ProductCard';
 import { RiderDashboard } from './components/rider/RiderDashboard';
@@ -33,6 +32,11 @@ import {
   deleteProductOnline,
   createMarketOnline,
   deleteMarketOnline,
+  subscribeToDepositRequestsOnline,
+  createDepositRequestOnline,
+  updateDepositRequestOnline,
+  subscribeToTransactionsOnline,
+  createTransactionOnline,
 } from './services/firestoreService';
 import {
   SEED_MARKETS,
@@ -51,6 +55,8 @@ import {
   OrderStatus,
   UnionArea,
   OrderMessage,
+  RiderDepositRequest,
+  PaymentTransactionRecord,
 } from './types';
 import { normalizePhone } from './lib/phone';
 import { Search, MapPin, ArrowRight, ArrowLeft, ShoppingBag, Sparkles, Flame, X } from 'lucide-react';
@@ -101,6 +107,8 @@ function MarketplaceMain() {
   // Orders & Riders
   const [orders, setOrders] = useState<Order[]>(() => dedupeOrders(SEED_ORDERS));
   const [registeredRiders, setRegisteredRiders] = useState<DeliveryRiderAccount[]>(SEED_RIDERS);
+  const [depositRequests, setDepositRequests] = useState<RiderDepositRequest[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<PaymentTransactionRecord[]>([]);
   const [activeRider, setActiveRider] = useState<DeliveryRiderAccount | null>(() => {
     try {
       const saved = localStorage.getItem('amar_active_rider');
@@ -159,13 +167,62 @@ function MarketplaceMain() {
       }
     });
 
+    const unsubDeposits = subscribeToDepositRequestsOnline((liveRequests) => {
+      if (liveRequests.length > 0) {
+        setDepositRequests(
+          [...liveRequests].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+        );
+      }
+    });
+
+    const unsubTransactions = subscribeToTransactionsOnline((liveTxs) => {
+      if (liveTxs.length > 0) {
+        setPaymentTransactions(
+          [...liveTxs].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+        );
+      }
+    });
+
     return () => {
       unsubOrders();
       unsubRiders();
       unsubProducts();
       unsubMarkets();
+      unsubDeposits();
+      unsubTransactions();
     };
   }, []);
+
+  // Real-time synchronization: Keep activeRider in sync with registeredRiders
+  // (Fix: when admin deactivates rider in office, the rider's activeRider immediately updates to isActive: false)
+  useEffect(() => {
+    if (activeRider && registeredRiders.length > 0) {
+      const liveRider = registeredRiders.find(
+        (r) => r.id === activeRider.id || (r.phone && normalizePhone(r.phone) === normalizePhone(activeRider.phone))
+      );
+      if (liveRider) {
+        if (
+          liveRider.isActive !== activeRider.isActive ||
+          liveRider.isDeactivated !== activeRider.isDeactivated ||
+          liveRider.deactivatedReason !== activeRider.deactivatedReason ||
+          liveRider.currentBalance !== activeRider.currentBalance
+        ) {
+          const synced = {
+            ...activeRider,
+            ...liveRider,
+          };
+          setActiveRider(synced);
+          try {
+            localStorage.setItem('amar_active_rider', JSON.stringify(synced));
+          } catch {}
+        }
+      }
+    }
+  }, [registeredRiders, activeRider]);
 
   // Logged-in Customer Profile (Online from Firebase)
   const [loggedInCustomer, setLoggedInCustomer] = useState<CustomerAccount | null>(() => {
@@ -281,6 +338,19 @@ function MarketplaceMain() {
 
   // Rider Accepts Order
   const handleRiderAcceptOrder = async (orderId: string, rider: DeliveryRiderAccount) => {
+    // 1. Strict real-time deactivation check
+    const liveRider = registeredRiders.find(
+      (r) => r.id === rider.id || (r.phone && normalizePhone(r.phone) === normalizePhone(rider.phone))
+    );
+    if (
+      rider.isActive === false ||
+      rider.isDeactivated === true ||
+      (liveRider && (liveRider.isActive === false || liveRider.isDeactivated === true))
+    ) {
+      alert('আপনার একাউন্টটি সাময়িকভাবে ডিঅ্যাক্টিভ করা রয়েছে। নতুন কোনো অর্ডার গ্রহণ করা যাবে না। অনুগ্রহ করে অফিসে যোগাযোগ করে বা ক্যাশ জমা দিয়ে একাউন্ট সক্রিয় করুন।');
+      return;
+    }
+
     try {
       await updateOrderOnline(orderId, {
         riderId: rider.id,
@@ -316,6 +386,252 @@ function MarketplaceMain() {
           : o
       )
     );
+  };
+
+  // Rider Cancels / Releases an Accepted Order
+  const handleRiderCancelOrder = async (orderId: string, reason: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const riderId = activeRider?.id || targetOrder?.riderId || '';
+    const riderName = activeRider?.name || targetOrder?.riderName || 'রাইডার';
+    const riderPhone = activeRider?.phone || targetOrder?.riderPhone || '';
+    const nowStr = new Date().toISOString();
+
+    const updates: Partial<Order> = {
+      orderStatus: 'shop_confirmed', // Released back to pool so other riders can claim
+      riderId: '',
+      riderName: '',
+      riderPhone: '',
+      isRiderCancelled: true,
+      riderCancelReason: reason,
+      cancelledByRiderId: riderId,
+      cancelledByRiderName: riderName,
+      cancelledByRiderPhone: riderPhone,
+      riderCancelledAt: nowStr,
+      updatedAt: nowStr,
+    };
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
+    );
+
+    try {
+      await updateOrderOnline(orderId, updates);
+      await fetch('/api/orders/rider-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          reason,
+          riderId,
+          riderName,
+          riderPhone,
+        }),
+      });
+    } catch (err) {
+      console.warn('Error syncing rider cancel:', err);
+    }
+  };
+
+  // Admin Marks an Order as Fake / Fraud
+  const handleMarkFakeOrder = async (orderId: string, reason: string) => {
+    const nowStr = new Date().toISOString();
+    const updates: Partial<Order> = {
+      isFakeOrder: true,
+      fakeOrderReason: reason,
+      fakeOrderMarkedAt: nowStr,
+      orderStatus: 'cancelled',
+      cancellationReason: `ফেক অর্ডার: ${reason}`,
+      updatedAt: nowStr,
+    };
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
+    );
+
+    try {
+      await updateOrderOnline(orderId, updates);
+      await fetch('/api/admin/orders/mark-fake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          reason,
+        }),
+      });
+    } catch (err) {
+      console.warn('Error marking fake order:', err);
+    }
+  };
+
+  // Rider Submits Cash Deposit Request to Office
+  const handleRiderSubmitDeposit = async (amount: number, notes?: string) => {
+    if (!activeRider) return;
+    const nowStr = new Date().toISOString();
+    const reqId = `dep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    // Collect delivered order IDs with unremitted COD
+    const uncollectedOrderIds = orders
+      .filter((o) => o.riderId === activeRider.id && o.orderStatus === 'delivered' && o.paymentStatus === 'collected')
+      .map((o) => o.id);
+
+    const newRequest: RiderDepositRequest = {
+      id: reqId,
+      riderId: activeRider.id,
+      riderName: activeRider.name,
+      riderPhone: activeRider.phone,
+      amount,
+      status: 'pending',
+      notes: notes || '',
+      orderIds: uncollectedOrderIds,
+      createdAt: nowStr,
+    };
+
+    setDepositRequests((prev) => [newRequest, ...prev.filter((r) => r.id !== reqId)]);
+
+    try {
+      await createDepositRequestOnline(newRequest);
+      await fetch('/api/rider/deposit-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          riderId: activeRider.id,
+          riderName: activeRider.name,
+          riderPhone: activeRider.phone,
+          amount,
+          notes,
+          orderIds: uncollectedOrderIds,
+        }),
+      });
+    } catch (err) {
+      console.warn('Error submitting deposit request:', err);
+    }
+  };
+
+  // Admin Approves Rider Cash Deposit Request
+  const handleApproveDeposit = async (requestId: string, adminNotes?: string) => {
+    const req = depositRequests.find((r) => r.id === requestId);
+    if (!req) return;
+    const nowStr = new Date().toISOString();
+    const voucherId = `MEMO-${Date.now().toString().slice(-6)}`;
+
+    // 1. Update deposit request state
+    const updatedReq: RiderDepositRequest = {
+      ...req,
+      status: 'approved',
+      adminNotes: adminNotes || 'অফিসে ক্যাশ টাকা বুঝে গ্রহণ করা হয়েছে',
+      processedAt: nowStr,
+      processedBy: 'Admin',
+      voucherId,
+    };
+    setDepositRequests((prev) =>
+      prev.map((r) => (r.id === requestId ? updatedReq : r))
+    );
+
+    // 2. Create payment transaction record
+    const txRecord: PaymentTransactionRecord = {
+      id: voucherId,
+      riderId: req.riderId,
+      riderName: req.riderName,
+      riderPhone: req.riderPhone,
+      type: 'deposit_handover',
+      amount: req.amount,
+      status: 'approved',
+      notes: req.notes,
+      adminNotes: adminNotes || 'অফিসে ক্যাশ টাকা বুঝে গ্রহণ করা হয়েছে',
+      createdAt: req.createdAt,
+      processedAt: nowStr,
+      orderIds: req.orderIds,
+    };
+    setPaymentTransactions((prev) => [txRecord, ...prev.filter((t) => t.id !== voucherId)]);
+
+    // 3. Mark rider's collected orders as 'deposited'
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.riderId === req.riderId && o.paymentStatus === 'collected'
+          ? { ...o, paymentStatus: 'deposited', updatedAt: nowStr }
+          : o
+      )
+    );
+
+    // 4. Update online Firestore & backend
+    try {
+      await updateDepositRequestOnline(requestId, {
+        status: 'approved',
+        adminNotes: adminNotes || 'অফিসে ক্যাশ টাকা বুঝে গ্রহণ করা হয়েছে',
+        processedAt: nowStr,
+        processedBy: 'Admin',
+        voucherId,
+      });
+      await createTransactionOnline(txRecord);
+      await recordRiderHandoverOnline(req.riderId, req.amount, adminNotes || 'Cash deposit approved');
+      await fetch('/api/admin/deposit-request/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId,
+          adminNotes,
+          processedBy: 'Admin',
+        }),
+      });
+    } catch (err) {
+      console.warn('Error approving deposit online:', err);
+    }
+  };
+
+  // Admin Rejects Rider Cash Deposit Request
+  const handleRejectDeposit = async (requestId: string, adminNotes?: string) => {
+    const req = depositRequests.find((r) => r.id === requestId);
+    if (!req) return;
+    const nowStr = new Date().toISOString();
+    const txId = `REJ-${Date.now().toString().slice(-6)}`;
+
+    const updatedReq: RiderDepositRequest = {
+      ...req,
+      status: 'rejected',
+      adminNotes: adminNotes || 'টাকা জমা পাওয়া যায়নি বা পরিমাণে অসঙ্গতি রয়েছে',
+      processedAt: nowStr,
+      processedBy: 'Admin',
+    };
+    setDepositRequests((prev) =>
+      prev.map((r) => (r.id === requestId ? updatedReq : r))
+    );
+
+    const txRecord: PaymentTransactionRecord = {
+      id: txId,
+      riderId: req.riderId,
+      riderName: req.riderName,
+      riderPhone: req.riderPhone,
+      type: 'rejection_adjustment',
+      amount: req.amount,
+      status: 'rejected',
+      notes: req.notes,
+      adminNotes: adminNotes || 'টাকা জমা পাওয়া যায়নি বা পরিমাণে অসঙ্গতি রয়েছে',
+      createdAt: req.createdAt,
+      processedAt: nowStr,
+      orderIds: req.orderIds,
+    };
+    setPaymentTransactions((prev) => [txRecord, ...prev.filter((t) => t.id !== txId)]);
+
+    try {
+      await updateDepositRequestOnline(requestId, {
+        status: 'rejected',
+        adminNotes: adminNotes || 'টাকা জমা পাওয়া যায়নি বা পরিমাণে অসঙ্গতি রয়েছে',
+        processedAt: nowStr,
+        processedBy: 'Admin',
+      });
+      await createTransactionOnline(txRecord);
+      await fetch('/api/admin/deposit-request/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId,
+          adminNotes,
+          processedBy: 'Admin',
+        }),
+      });
+    } catch (err) {
+      console.warn('Error rejecting deposit online:', err);
+    }
   };
 
   // State Transition (e.g. picked up, delivered)
@@ -772,20 +1088,7 @@ function MarketplaceMain() {
                 {/* 2.1 SLIDEBAR (Image Carousel right under Navbar) */}
                 <HeroSlider />
 
-                {/* 2.2 AREA SELECTION (Right below Slidebar, Admin-Added Dynamic Areas & Unions) */}
-                <AreaSelector
-                  markets={markets}
-                  selectedAreaId={selectedAreaId}
-                  onSelectArea={(id) => {
-                    setSelectedAreaId(id);
-                    setSelectedUnionId('all');
-                  }}
-                  unions={unions}
-                  selectedUnionId={selectedUnionId}
-                  onSelectUnion={(uId) => setSelectedUnionId(uId)}
-                />
-
-                {/* 2.3 PRODUCT LIST FOR SELECTED AREA */}
+                {/* 2.2 PRODUCT LIST FOR SELECTED AREA */}
                 <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 space-y-4">
                   {/* Category Chips & Search Bar */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs">
@@ -1231,7 +1534,11 @@ function MarketplaceMain() {
           <RiderDashboard
             rider={activeRider}
             allOrders={orders}
+            depositRequests={depositRequests}
+            paymentTransactions={paymentTransactions}
             onAcceptOrder={handleRiderAcceptOrder}
+            onCancelOrder={handleRiderCancelOrder}
+            onSubmitDeposit={handleRiderSubmitDeposit}
             onTransitionOrder={handleTransitionOrder}
             onToggleOnline={(online) => {
               const updated = { ...activeRider, isOnline: online };
@@ -1256,6 +1563,8 @@ function MarketplaceMain() {
             categories={SEED_CATEGORIES}
             registeredRiders={registeredRiders}
             unions={unions}
+            depositRequests={depositRequests}
+            paymentTransactions={paymentTransactions}
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
             onToggleProductPrivate={handleToggleProductPrivate}
@@ -1267,6 +1576,9 @@ function MarketplaceMain() {
             onUpdateRiderUnions={handleUpdateRiderUnions}
             onToggleRiderActive={handleToggleRiderActive}
             onRecordHandover={handleRecordHandover}
+            onApproveDeposit={handleApproveDeposit}
+            onRejectDeposit={handleRejectDeposit}
+            onMarkFakeOrder={handleMarkFakeOrder}
             onSendMessage={handleSendMessage}
             onUpdateOrderNote={handleUpdateOrderNote}
             onLogout={handleLogout}

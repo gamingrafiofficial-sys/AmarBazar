@@ -44,6 +44,8 @@ export const inMemoryDB = {
   pricing: { ...DEFAULT_DELIVERY_PRICING },
   ledger: [] as LedgerEntry[],
   auditLogs: [] as any[],
+  depositRequests: [] as any[],
+  transactions: [] as any[],
 };
 
 import { normalizePhone, convertBengaliDigits, isValidBangladeshiPhone } from './src/lib/phone';
@@ -844,6 +846,191 @@ app.post('/api/admin/assign-rider', (req, res) => {
   order.updatedAt = new Date().toISOString();
 
   res.json({ success: true, order });
+});
+
+// Rider: Cancel / Release Accepted Order
+app.post('/api/orders/rider-cancel', (req, res) => {
+  const { orderId, riderId, riderName, riderPhone, reason } = req.body;
+  const order = inMemoryDB.orders.find((o) => o.id === orderId);
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+
+  const now = new Date().toISOString();
+  order.isRiderCancelled = true;
+  order.riderCancelReason = reason || 'রাইডার কর্তৃক অর্ডার ছেড়ে দেওয়া হয়েছে';
+  order.cancelledByRiderId = riderId;
+  order.cancelledByRiderName = riderName;
+  order.cancelledByRiderPhone = riderPhone;
+  order.riderCancelledAt = now;
+  order.orderStatus = 'shop_confirmed'; // Available for another rider or admin assignment
+  order.riderId = '';
+  order.riderName = '';
+  order.riderPhone = '';
+  order.updatedAt = now;
+
+  inMemoryDB.auditLogs.unshift({
+    id: `audit-${Date.now()}`,
+    userId: riderId,
+    action: 'RIDER_CANCELLED_ORDER',
+    resource: 'orders',
+    resourceId: orderId,
+    details: `Rider ${riderName} (${riderPhone}) cancelled order #${orderId}. Reason: ${reason || 'N/A'}`,
+    createdAt: now,
+  });
+
+  savePersistentStore();
+  res.json({ success: true, order });
+});
+
+// Admin: Mark Order as Fake (Quarantined to Fake Orders List)
+app.post('/api/admin/orders/mark-fake', (req, res) => {
+  const { orderId, reason } = req.body;
+  const order = inMemoryDB.orders.find((o) => o.id === orderId);
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+
+  const now = new Date().toISOString();
+  order.isFakeOrder = true;
+  order.orderStatus = 'cancelled';
+  order.cancellationReason = 'ফেক অর্ডার (Fake Order)';
+  order.fakeOrderReason = reason || 'এডমিন কর্তৃক ফেক অর্ডার হিসেবে নিশ্চিত করা হয়েছে';
+  order.fakeOrderMarkedAt = now;
+  order.updatedAt = now;
+
+  inMemoryDB.auditLogs.unshift({
+    id: `audit-${Date.now()}`,
+    userId: 'admin',
+    action: 'ORDER_MARKED_FAKE',
+    resource: 'orders',
+    resourceId: orderId,
+    details: `Admin confirmed order #${orderId} as fake order. Reason: ${reason || 'Fake order'}`,
+    createdAt: now,
+  });
+
+  savePersistentStore();
+  res.json({ success: true, order });
+});
+
+// Rider: Submit Cash Deposit Request to Admin Office
+app.post('/api/rider/deposit-request', (req, res) => {
+  const { id, riderId, riderName, riderPhone, amount, notes, orderIds } = req.body;
+  if (!riderId || !amount || amount <= 0) {
+    return res.status(400).json({ error: 'Invalid deposit request parameters.' });
+  }
+
+  const newReq = {
+    id: id || `dep-${Date.now()}`,
+    riderId,
+    riderName,
+    riderPhone,
+    amount: Number(amount),
+    status: 'pending',
+    notes: notes || '',
+    orderIds: Array.isArray(orderIds) ? orderIds : [],
+    createdAt: new Date().toISOString(),
+  };
+
+  inMemoryDB.depositRequests.unshift(newReq);
+  savePersistentStore();
+  res.status(201).json({ success: true, request: newReq });
+});
+
+// Admin: Approve Rider Cash Deposit Request
+app.post('/api/admin/deposit-request/approve', (req, res) => {
+  const { requestId, adminNotes } = req.body;
+  const depReq = inMemoryDB.depositRequests.find((r) => r.id === requestId);
+  if (!depReq) {
+    return res.status(404).json({ error: 'Deposit request not found.' });
+  }
+
+  const now = new Date().toISOString();
+  depReq.status = 'approved';
+  depReq.processedAt = now;
+  depReq.processedBy = 'admin';
+  depReq.adminNotes = adminNotes || 'টাকা বুঝে পেয়ে অনুমোদন করা হলো';
+  depReq.voucherId = `MEMO-${Date.now().toString().slice(-6)}`;
+
+  // Mark rider's collected orders as deposited
+  let remainingSettle = depReq.amount;
+  inMemoryDB.orders
+    .filter((o) => o.riderId === depReq.riderId && o.paymentStatus === 'collected')
+    .forEach((o) => {
+      if (remainingSettle > 0) {
+        o.paymentStatus = 'deposited';
+        remainingSettle -= o.totalAmount;
+      }
+    });
+
+  // Record transaction memo
+  const txRecord = {
+    id: `tx-${Date.now()}`,
+    riderId: depReq.riderId,
+    riderName: depReq.riderName,
+    riderPhone: depReq.riderPhone,
+    type: 'deposit_handover',
+    amount: depReq.amount,
+    status: 'approved',
+    notes: depReq.notes,
+    adminNotes: depReq.adminNotes,
+    voucherId: depReq.voucherId,
+    createdAt: now,
+    processedAt: now,
+  };
+  inMemoryDB.transactions.unshift(txRecord);
+
+  // Settle rider balance
+  const rider = inMemoryDB.riders.find((r) => r.id === depReq.riderId);
+  if (rider) {
+    rider.currentBalance = Math.max(0, (rider.currentBalance || 0) - depReq.amount);
+  }
+
+  savePersistentStore();
+  res.json({ success: true, request: depReq, transaction: txRecord });
+});
+
+// Admin: Reject Rider Cash Deposit Request
+app.post('/api/admin/deposit-request/reject', (req, res) => {
+  const { requestId, adminNotes } = req.body;
+  const depReq = inMemoryDB.depositRequests.find((r) => r.id === requestId);
+  if (!depReq) {
+    return res.status(404).json({ error: 'Deposit request not found.' });
+  }
+
+  const now = new Date().toISOString();
+  depReq.status = 'rejected';
+  depReq.processedAt = now;
+  depReq.processedBy = 'admin';
+  depReq.adminNotes = adminNotes || 'টাকা অফিসে জমা হয়নি / পরিমাণ অমিল';
+
+  const txRecord = {
+    id: `tx-${Date.now()}`,
+    riderId: depReq.riderId,
+    riderName: depReq.riderName,
+    riderPhone: depReq.riderPhone,
+    type: 'rejection_adjustment',
+    amount: depReq.amount,
+    status: 'rejected',
+    notes: depReq.notes,
+    adminNotes: depReq.adminNotes,
+    createdAt: now,
+    processedAt: now,
+  };
+  inMemoryDB.transactions.unshift(txRecord);
+
+  savePersistentStore();
+  res.json({ success: true, request: depReq, transaction: txRecord });
+});
+
+app.get('/api/admin/deposit-requests', (req, res) => {
+  res.json({ success: true, requests: inMemoryDB.depositRequests });
+});
+
+app.get('/api/admin/transactions', (req, res) => {
+  res.json({ success: true, transactions: inMemoryDB.transactions });
 });
 
 // Admin: Get All Orders (Admin sees orders from all thanas and unions)

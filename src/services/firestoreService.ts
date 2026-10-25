@@ -22,6 +22,8 @@ import {
   Market,
   Product,
   LedgerEntry,
+  RiderDepositRequest,
+  PaymentTransactionRecord,
 } from '../types';
 import { normalizePhone } from '../lib/phone';
 import {
@@ -40,6 +42,8 @@ const ORDERS_COL = 'orders';
 const MARKETS_COL = 'markets';
 const PRODUCTS_COL = 'products';
 const LEDGER_COL = 'ledgerEntries';
+const DEPOSITS_COL = 'deposit_requests';
+const TRANSACTIONS_COL = 'transactions';
 
 /**
  * Initializes Firestore with seed data if collections are empty.
@@ -532,6 +536,67 @@ export async function deleteMarketOnline(marketId: string): Promise<void> {
     await deleteDoc(doc(db, MARKETS_COL, marketId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${MARKETS_COL}/${marketId}`);
+  }
+}
+
+// ==========================================
+// 5. DEPOSIT REQUESTS & TRANSACTIONS (REAL-TIME)
+// ==========================================
+
+export function subscribeToDepositRequestsOnline(
+  onUpdate: (requests: RiderDepositRequest[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, DEPOSITS_COL),
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => d.data() as RiderDepositRequest);
+      onUpdate(list);
+    },
+    (err) => console.error('Firestore Deposit Requests listener error:', err)
+  );
+}
+
+export async function createDepositRequestOnline(request: RiderDepositRequest): Promise<void> {
+  try {
+    await setDoc(doc(db, DEPOSITS_COL, request.id), request);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${DEPOSITS_COL}/${request.id}`);
+  }
+}
+
+export async function updateDepositRequestOnline(
+  requestId: string,
+  updates: Partial<RiderDepositRequest>
+): Promise<void> {
+  try {
+    const ref = doc(db, DEPOSITS_COL, requestId);
+    await updateDoc(ref, {
+      ...updates,
+      processedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${DEPOSITS_COL}/${requestId}`);
+  }
+}
+
+export function subscribeToTransactionsOnline(
+  onUpdate: (transactions: PaymentTransactionRecord[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, TRANSACTIONS_COL),
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => d.data() as PaymentTransactionRecord);
+      onUpdate(list);
+    },
+    (err) => console.error('Firestore Transactions listener error:', err)
+  );
+}
+
+export async function createTransactionOnline(record: PaymentTransactionRecord): Promise<void> {
+  try {
+    await setDoc(doc(db, TRANSACTIONS_COL, record.id), record);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `${TRANSACTIONS_COL}/${record.id}`);
   }
 }
 

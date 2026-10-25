@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Order, DeliveryRiderAccount, OrderStatus } from '../../types';
+import { Order, DeliveryRiderAccount, OrderStatus, RiderDepositRequest, PaymentTransactionRecord } from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
 import { OrderChatModal } from '../common/OrderChatModal';
@@ -31,12 +31,19 @@ import {
   Wallet,
   TrendingUp,
   Check,
+  Lock,
+  CheckCheck,
+  RefreshCw,
 } from 'lucide-react';
 
 interface RiderDashboardProps {
   rider: DeliveryRiderAccount;
   allOrders: Order[];
+  depositRequests?: RiderDepositRequest[];
+  paymentTransactions?: PaymentTransactionRecord[];
   onAcceptOrder: (orderId: string, rider: DeliveryRiderAccount) => Promise<void>;
+  onCancelOrder?: (orderId: string, reason: string) => Promise<void> | void;
+  onSubmitDeposit?: (amount: number, notes?: string) => Promise<void> | void;
   onTransitionOrder: (orderId: string, targetStatus: OrderStatus, reason?: string) => Promise<void>;
   onToggleOnline: (isOnline: boolean) => void;
   onRecordHandover: (riderId: string, amount: number, notes?: string) => Promise<void>;
@@ -48,7 +55,11 @@ interface RiderDashboardProps {
 export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   rider,
   allOrders: inputAllOrders,
+  depositRequests = [],
+  paymentTransactions = [],
   onAcceptOrder,
+  onCancelOrder,
+  onSubmitDeposit,
   onTransitionOrder,
   onToggleOnline,
   onRecordHandover,
@@ -85,7 +96,14 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [handoverAmount, setHandoverAmount] = useState<number>(0);
+  const [handoverNotes, setHandoverNotes] = useState<string>('অফিসে ক্যাশ টাকা জমা দিয়েছি');
+  const [depositSuccessMsg, setDepositSuccessMsg] = useState<string>('');
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
+
+  // Rider Order Release / Cancel Modal State
+  const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [cancelPresetReason, setCancelPresetReason] = useState<string>('গ্রাহক ফোন রিসিভ করছেন না');
+  const [cancelCustomReason, setCancelCustomReason] = useState<string>('');
 
   // Date Filtering State for Rider Performance & History
   type RiderDateFilter = 'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'custom';
@@ -198,9 +216,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return sum + split.riderPayout;
   }, 0);
 
+  // Filter this rider's deposit requests
+  const myDepositRequests = (depositRequests || []).filter((d) => d.riderId === rider.id);
+  const pendingDepositRequest = myDepositRequests.find((d) => d.status === 'pending');
+
   const handleClaimOrder = async (orderId: string) => {
-    if (rider.isActive === false) {
-      alert('আপনার অ্যাকাউন্ট সাময়িকভাবে স্থগিত রয়েছে। ব্যালেন্স জমা দিয়ে পুনরায় সক্রিয় করুন।');
+    if (rider.isActive === false || rider.isDeactivated === true) {
+      alert('আপনার অ্যাকাউন্ট সাময়িকভাবে ডিঅ্যাক্টিভ করা রয়েছে। নতুন কোনো অর্ডার গ্রহণ করা সম্ভব নয়। অফিসে বকেয়া ব্যালেন্স জমা দিয়ে বা এডমিনের সাথে যোগাযোগ করে একাউন্ট সক্রিয় করুন।');
       return;
     }
     setIsProcessing(true);
@@ -239,11 +261,34 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     setFailReason('');
   };
 
+  // Confirm rider cancelling/releasing an accepted order
+  const handleCancelSubmit = async () => {
+    if (!cancelOrderId) return;
+    const finalReason =
+      cancelPresetReason === 'অন্যান্য কারণ' && cancelCustomReason.trim()
+        ? cancelCustomReason.trim()
+        : cancelPresetReason;
+
+    setIsProcessing(true);
+    if (onCancelOrder) {
+      await onCancelOrder(cancelOrderId, finalReason);
+    }
+    setIsProcessing(false);
+    setCancelOrderId(null);
+    setCancelCustomReason('');
+  };
+
   const handleHandoverSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (handoverAmount <= 0) return;
     setIsProcessing(true);
-    await onRecordHandover(rider.id, handoverAmount, `Rider ${rider.name} COD handover`);
+    if (onSubmitDeposit) {
+      await onSubmitDeposit(handoverAmount, handoverNotes);
+      setDepositSuccessMsg(`৳${handoverAmount} জমার রিকোয়েস্ট এডমিন অফিসে পাঠানো হয়েছে। এডমিন টাকা বুঝে নিয়ে অনুমোদন করলে ব্যালেন্স কর্তন হবে ও ট্রানজাকশন মেমো তৈরি হবে।`);
+      setTimeout(() => setDepositSuccessMsg(''), 7000);
+    } else {
+      await onRecordHandover(rider.id, handoverAmount, handoverNotes);
+    }
     setIsProcessing(false);
     setShowHandoverModal(false);
   };
@@ -338,12 +383,20 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         </div>
       </div>
 
+      {/* NOTIFICATION: DEPOSIT REQUEST SUCCESS */}
+      {depositSuccessMsg && (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-3xl p-4 mb-6 text-emerald-950 flex items-center gap-3 shadow-xs animate-in fade-in">
+          <CheckCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+          <p className="text-xs font-bold text-emerald-900">{depositSuccessMsg}</p>
+        </div>
+      )}
+
       {/* DEACTIVATION WARNING BANNER */}
-      {rider.isActive === false && (
+      {(rider.isActive === false || rider.isDeactivated === true) && (
         <div className="bg-rose-50 border-2 border-rose-300 rounded-3xl p-5 mb-6 text-rose-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
           <div className="flex items-start gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 font-bold mt-0.5 shadow-xs">
-              <AlertTriangle className="w-6 h-6" />
+              <Lock className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -353,7 +406,7 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     : 'Your rider account is temporarily suspended (inactive)'}
                 </h3>
                 <span className="bg-rose-700 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                  {language === 'bn' ? 'ডিঅ্যাক্টিভ' : 'Inactive'}
+                  {language === 'bn' ? 'ডিঅ্যাক্টিভ • নতুন অর্ডার বন্ধ' : 'Inactive • Claiming Locked'}
                 </span>
               </div>
               <p className="text-xs text-rose-800 mt-1 font-medium">
@@ -362,8 +415,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
               </p>
               <p className="text-[11px] text-rose-700 mt-0.5">
                 {language === 'bn'
-                  ? <>হাতে থাকা বকেয়া ব্যালেন্স: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong> অফিসে জমা দিয়ে অ্যাকাউন্ট সক্রিয় করুন।</>
-                  : <>Cash in hand balance: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong>. Please deposit at admin office to reactivate.</>}
+                  ? <>হাতে থাকা বকেয়া ব্যালেন্স: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong> অফিসে জমা দেওয়ার রিকোয়েস্ট পাঠান। এডমিন ভেরিফাই করে অনুমোদন দিলে অ্যাকাউন্টটি পুনরায় অ্যাক্টিভ হবে।</>
+                  : <>Cash in hand balance: <strong className="font-mono font-bold text-rose-950 text-xs">{formatBDT(cashInHand)}</strong>. Please submit a deposit request to office.</>}
               </p>
             </div>
           </div>
@@ -373,9 +426,10 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 setHandoverAmount(cashInHand);
                 setShowHandoverModal(true);
               }}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors shrink-0"
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors shrink-0 flex items-center gap-1.5"
             >
-              {language === 'bn' ? 'এডমিন অফিসে ক্যাশ জমা দিন' : 'Deposit Cash to Admin'}
+              <Banknote className="w-4 h-4" />
+              <span>{language === 'bn' ? 'এডমিন অফিসে ক্যাশ জমা দিন' : 'Deposit Cash to Admin'}</span>
             </button>
           )}
         </div>
@@ -652,11 +706,24 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
                   <button
                     onClick={() => handleClaimOrder(order.id)}
-                    disabled={isProcessing}
-                    className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors shadow-xs"
+                    disabled={isProcessing || rider.isActive === false || rider.isDeactivated === true}
+                    className={`w-full font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors shadow-xs ${
+                      rider.isActive === false || rider.isDeactivated === true
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed border border-slate-300'
+                        : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                    }`}
                   >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>অর্ডার গ্রহণ করুন (Accept Delivery)</span>
+                    {rider.isActive === false || rider.isDeactivated === true ? (
+                      <>
+                        <Lock className="w-4 h-4 text-slate-500" />
+                        <span>অ্যাকাউন্ট ডিঅ্যাক্টিভ (অর্ডার গ্রহণ বন্ধ)</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>অর্ডার গ্রহণ করুন (Accept Delivery)</span>
+                      </>
+                    )}
                   </button>
                 </div>
               ))}
@@ -802,9 +869,24 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     )}
 
                     <button
+                      type="button"
+                      onClick={() => {
+                        setCancelOrderId(order.id);
+                        setCancelPresetReason('গ্রাহক ফোন রিসিভ করছেন না');
+                        setCancelCustomReason('');
+                      }}
+                      disabled={isProcessing}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors shrink-0"
+                      title="অর্ডারটি ছেড়ে দিলে অন্য কোনো রাইডার এটি নিতে পারবে"
+                    >
+                      <XCircle className="w-4 h-4 text-amber-600" />
+                      <span>অর্ডার ছেড়ে দিন / বাতিল</span>
+                    </button>
+
+                    <button
                       onClick={() => setFailOrderId(order.id)}
                       disabled={isProcessing}
-                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-2.5 px-4 rounded-xl text-xs"
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-2.5 px-3 rounded-xl text-xs"
                     >
                       ব্যর্থ ডেলিভারি
                     </button>
@@ -906,6 +988,183 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         )}
       </div>
 
+      {/* SECTION 4: CASH DEPOSIT REQUESTS & OFFICE MEMOS */}
+      <div className="mb-8 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-emerald-700" />
+              <span>ক্যাশ জমার রিকোয়েস্ট ও পেমেন্ট মেমো ({myDepositRequests.length})</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              অফিসে টাকা জমা দেওয়ার রিকোয়েস্ট স্ট্যাটাস, এডমিনের অনুমোদন এবং ট্রানজাকশন মেমো
+            </p>
+          </div>
+          {cashInHand > 0 && (
+            <button
+              onClick={() => {
+                setHandoverAmount(cashInHand);
+                setShowHandoverModal(true);
+              }}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors shadow-2xs self-start sm:self-auto flex items-center gap-1.5"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>নতুন জমার রিকোয়েস্ট পাঠান</span>
+            </button>
+          )}
+        </div>
+
+        {myDepositRequests.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            আপনার কোনো ক্যাশ জমার রিকোয়েস্ট বা মেমো এখনো নেই। ডেলিভারি শেষে ক্যাশ জমা দিতে উপরে বাটনে চাপুন।
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myDepositRequests.map((req) => (
+              <div
+                key={req.id}
+                className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2 flex-wrap gap-1">
+                    <span className="font-mono font-bold text-slate-900">ID: #{req.id}</span>
+                    {req.status === 'pending' && (
+                      <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                        <span>অপেক্ষমান (এডমিন ভেরিফিকেশন চলছে)</span>
+                      </span>
+                    )}
+                    {req.status === 'approved' && (
+                      <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCheck className="w-3 h-3 text-emerald-700" />
+                        <span>অনুমোদিত • ক্যাশ অফিসে গৃহীত</span>
+                      </span>
+                    )}
+                    {req.status === 'rejected' && (
+                      <span className="bg-rose-100 text-rose-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <XCircle className="w-3 h-3 text-rose-700" />
+                        <span>প্রত্যাখ্যাত (ব্যালেন্স বৃদ্ধি বহাল)</span>
+                      </span>
+                    )}
+                    {req.voucherId && (
+                      <span className="bg-blue-100 text-blue-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                        মেমো: {req.voucherId}
+                      </span>
+                    )}
+                  </div>
+
+                  {req.notes && (
+                    <p className="text-slate-600">
+                      <strong>রাইডার নোট:</strong> {req.notes}
+                    </p>
+                  )}
+
+                  {req.adminNotes && (
+                    <p className="text-slate-700 bg-white p-2 rounded-xl border border-slate-200 text-[11px] mt-1 inline-block">
+                      <strong>🏢 অফিস মন্তব্য:</strong> {req.adminNotes}
+                    </p>
+                  )}
+
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    রিকোয়েস্টের সময়: {new Date(req.createdAt).toLocaleString('bn-BD', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </p>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] text-slate-400 block">জমার পরিমাণ</span>
+                  <span className="font-mono font-black text-base text-emerald-900">
+                    {formatBDT(req.amount)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Rider Cancel / Release Order Modal */}
+      {cancelOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  অর্ডার ছেড়ে দিন / বাতিল করুন
+                </h3>
+                <p className="text-[11px] text-slate-500 font-mono">অর্ডার: #{cancelOrderId}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-3 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+              ⚠️ আপনি এই অর্ডারটি ছেড়ে দিলে এটি পুনরায় অন্য রাইডারদের জন্য উন্মুক্ত হবে এবং এডমিন ড্যাশবোর্ডে <strong>'রাইডার বাতিলকৃত'</strong> তালিকায় জমা হবে।
+            </p>
+
+            <div className="space-y-2 mb-4 text-xs">
+              <label className="font-bold text-slate-800 block">বাতিল করার সুনির্দিষ্ট কারণ নির্বাচন করুন:</label>
+              {[
+                'গ্রাহক ফোন রিসিভ করছেন না',
+                'অর্ডারের লোকেশন অনেক দূরে বা ভুল ঠিকানা',
+                'জরুরি ব্যক্তিগত সমস্যা (বাইক নষ্ট / অসুস্থতা)',
+                'সন্দেহজনক বা ফেক কাস্টমার অর্ডার',
+                'অন্যান্য কারণ',
+              ].map((reasonOption) => (
+                <label
+                  key={reasonOption}
+                  className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-colors ${
+                    cancelPresetReason === reasonOption
+                      ? 'bg-amber-50 border-amber-400 font-bold text-amber-950'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="cancel_reason"
+                    checked={cancelPresetReason === reasonOption}
+                    onChange={() => setCancelPresetReason(reasonOption)}
+                    className="text-amber-600"
+                  />
+                  <span>{reasonOption}</span>
+                </label>
+              ))}
+
+              {cancelPresetReason === 'অন্যান্য কারণ' && (
+                <textarea
+                  rows={2}
+                  value={cancelCustomReason}
+                  onChange={(e) => setCancelCustomReason(e.target.value)}
+                  placeholder="বিস্তারিত কারণ এখানে লিখুন..."
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 mt-2"
+                />
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCancelSubmit}
+                disabled={isProcessing || (cancelPresetReason === 'অন্যান্য কারণ' && !cancelCustomReason.trim())}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-xs disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                অর্ডার ছেড়ে দেওয়া নিশ্চিত করুন
+              </button>
+              <button
+                type="button"
+                onClick={() => setCancelOrderId(null)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 px-4 rounded-xl text-xs cursor-pointer"
+              >
+                বাতিল
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Failure Reason Modal */}
       {failOrderId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
@@ -939,37 +1198,75 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         </div>
       )}
 
-      {/* Handover Modal */}
+      {/* Cash Deposit Request to Office Modal */}
       {showHandoverModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-emerald-200">
-            <h3 className="font-bold text-slate-900 text-sm mb-2">
-              এডমিন অফিসে ক্যাশ জমা দিন
-            </h3>
-            <form onSubmit={handleHandoverSubmit} className="space-y-3 text-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                <Banknote className="w-5 h-5" />
+              </div>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">জমার পরিমাণ (৳)</label>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  এডমিন অফিসে ক্যাশ জমা দেওয়ার রিকোয়েস্ট
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  বর্তমান ক্যাশ ব্যালেন্স: <strong className="text-emerald-700 font-mono font-bold">{formatBDT(cashInHand)}</strong>
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleHandoverSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  জমার পরিমাণ (৳) <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="number"
                   min="1"
                   max={cashInHand}
                   value={handoverAmount}
                   onChange={(e) => setHandoverAmount(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold text-slate-900"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 font-mono text-sm"
+                  required
                 />
               </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  জমার নোট / মেমো বিবরণ
+                </label>
+                <input
+                  type="text"
+                  placeholder="যেমন: অফিসে নগদ প্রদান / বিকাশ ট্রানজাকশন..."
+                  value={handoverNotes}
+                  onChange={(e) => setHandoverNotes(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-800"
+                />
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-[11px] text-emerald-950 space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                  <span>স্বয়ংক্রিয় ভাউচার ও ডাটাবেজ সিস্টেম:</span>
+                </p>
+                <p>
+                  রিকোয়েস্ট সাবমিট করার পর এডমিন অফিসে টাকা গ্রহণ করে অনুমোদন দিলে আপনার ব্যালেন্স স্বয়ংক্রিয়ভাবে মাইনাস হবে এবং একটি অফিস মেমো তৈরি হবে।
+                </p>
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"
-                  disabled={isProcessing}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-xl"
+                  disabled={isProcessing || handoverAmount <= 0}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
-                  জমা নিশ্চিত করুন
+                  রিকোয়েস্ট পাঠান
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowHandoverModal(false)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-xl"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 px-4 rounded-xl cursor-pointer"
                 >
                   বাতিল
                 </button>
