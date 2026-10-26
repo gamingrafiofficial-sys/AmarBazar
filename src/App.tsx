@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LanguageProvider, useLanguage } from './hooks/useLanguage';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { CartProvider, useCart } from './hooks/useCart';
@@ -136,6 +136,25 @@ function MarketplaceMain() {
   };
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Rider Navigation Tab State ('overview' | 'orders' | 'outlets' | 'profile')
+  const [riderTab, setRiderTab] = useState<'overview' | 'orders' | 'outlets' | 'profile'>('overview');
+
+  // Filter incoming unassigned orders matching this rider's assigned union/area
+  const incomingRiderOrdersCount = useMemo(() => {
+    if (role !== 'rider' || !activeRider) return 0;
+    return orders.filter((o) => {
+      const isUnassigned =
+        (!o.riderId || o.riderId === '') &&
+        ['pending_shop_confirmation', 'shop_confirmed'].includes(o.orderStatus);
+      if (!isUnassigned) return false;
+      if (activeRider.assignedUnionIds && activeRider.assignedUnionIds.length > 0) {
+        if (o.unionId) return activeRider.assignedUnionIds.includes(o.unionId);
+        return o.thanaId === activeRider.area || o.marketId === activeRider.area;
+      }
+      return o.thanaId === activeRider.area || o.marketId === activeRider.area;
+    }).length;
+  }, [role, activeRider, orders]);
 
   // Real-time Firebase Firestore Online Synchronization
   useEffect(() => {
@@ -1511,6 +1530,7 @@ function MarketplaceMain() {
                     } catch {}
                     setActiveRider(updatedRider);
                     setRole('rider');
+                    setRiderTab('overview');
                     setCurrentPage('catalog');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
@@ -1541,6 +1561,8 @@ function MarketplaceMain() {
             allOrders={orders}
             depositRequests={depositRequests}
             paymentTransactions={paymentTransactions}
+            activeTab={riderTab}
+            onSelectTab={setRiderTab}
             onAcceptOrder={handleRiderAcceptOrder}
             onCancelOrder={handleRiderCancelOrder}
             onSubmitDeposit={handleRiderSubmitDeposit}
@@ -1616,6 +1638,12 @@ function MarketplaceMain() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         loggedInCustomer={loggedInCustomer}
+        riderTab={riderTab}
+        onSelectRiderTab={(tab) => {
+          setRiderTab(tab);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        incomingOrdersCount={incomingRiderOrdersCount}
       />
 
       {/* Global Area & Union Selector Dialog */}

@@ -1,4 +1,4 @@
-import { Market, Category, Product, Order, DeliveryPricingPolicy, DeliveryRiderAccount, UserProfile, CustomerAccount, UnionArea } from '../types';
+import { Market, Category, Product, Order, DeliveryPricingPolicy, DeliveryRiderAccount, UserProfile, CustomerAccount, UnionArea, OutletHub } from '../types';
 
 export const ADMIN_CREDENTIALS = {
   email: 'youradmincreator@gmail.com',
@@ -102,6 +102,78 @@ export const SEED_UNIONS: UnionArea[] = [
   { id: 'singhashree', nameEn: 'Singhashree', nameBn: 'সিংহশ্রী', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
   { id: 'tok', nameEn: 'Tok', nameBn: 'টোক', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
   { id: 'ghagatia', nameEn: 'Ghagatia', nameBn: 'ঘাগটিয়া', thanaId: 'kapasia', thanaNameBn: 'কাপাসিয়া' },
+];
+
+// Physical Outlets and Distribution Hubs for Gazipur (Kaliganj & Kapasia)
+export const SEED_OUTLETS: OutletHub[] = [
+  {
+    id: 'outlet-kaliganj-1',
+    nameBn: 'কালীগঞ্জ সেন্ট্রাল ডিস্ট্রিবিউশন হাব',
+    nameEn: 'Kaliganj Central Hub & Outlet',
+    hubType: 'সেন্ট্রাল হাব ও ওয়্যারহাউজ',
+    thanaId: 'kaliganj',
+    thanaNameBn: 'কালীগঞ্জ',
+    addressBn: 'কালীগঞ্জ বাজার মেইন রোড, কালীগঞ্জ পৌরসভা, গাজীপুর',
+    managerName: 'মোঃ শফিকুল ইসলাম',
+    phone: '01712-345678',
+    coverageUnionIds: ['tumulia', 'baktarpur', 'jangalia', 'bahadurshadi'],
+    coverageUnions: ['কালীগঞ্জ পৌরসভা', 'তুমুলিয়া ইউনিয়ন', 'বক্তারপুর ইউনিয়ন', 'জাঙ্গালিয়া ইউনিয়ন', 'বাহাদুরশাদী ইউনিয়ন'],
+    timing: 'সকাল ৭:০০ - রাত ১০:০০',
+    status: 'active',
+    staffCount: 6,
+    dailyDispatch: 42,
+  },
+  {
+    id: 'outlet-jamalpur-1',
+    nameBn: 'জামালপুর-নাগরী এক্সপ্রেস কালেকশন পয়েন্ট',
+    nameEn: 'Jamalpur-Nagari Express Point',
+    hubType: 'কুইক পিকআপ ও কালেকশন পয়েন্ট',
+    thanaId: 'kaliganj',
+    thanaNameBn: 'কালীগঞ্জ',
+    addressBn: 'জামালপুর বাসস্ট্যান্ড সংলগ্ন, কালীগঞ্জ, গাজীপুর',
+    managerName: 'তানভীর আহমেদ',
+    phone: '01911-223344',
+    coverageUnionIds: ['jamalpur', 'nagari', 'moktarpur'],
+    coverageUnions: ['জামালপুর ইউনিয়ন', 'নাগরী ইউনিয়ন', 'মোক্তারপুর ইউনিয়ন'],
+    timing: 'সকাল ৮:০০ - রাত ৯:০০',
+    status: 'active',
+    staffCount: 3,
+    dailyDispatch: 24,
+  },
+  {
+    id: 'outlet-kapasia-1',
+    nameBn: 'কাপাসিয়া ফ্রেশ প্রডিউস ডিপো ও আউটলেট',
+    nameEn: 'Kapasia Fresh Produce Depot',
+    hubType: 'রিজিওনাল ফ্রেশ ডিপো',
+    thanaId: 'kapasia',
+    thanaNameBn: 'কাপাসিয়া',
+    addressBn: 'কাপাসিয়া সদর থানা মোড়, কাপাসিয়া, গাজীপুর',
+    managerName: 'আরিফুল হাসান',
+    phone: '01819-876543',
+    coverageUnionIds: ['kapasia_sadar', 'targaon', 'durgapur', 'chandpur'],
+    coverageUnions: ['কাপাসিয়া সদর', 'তরগাঁও', 'দুর্গাপুর', 'চাঁদপুর'],
+    timing: 'সকাল ৬:৩০ - রাত ৯:৩০',
+    status: 'active',
+    staffCount: 5,
+    dailyDispatch: 38,
+  },
+  {
+    id: 'outlet-kapasia-north',
+    nameBn: 'বরমী-টোক রিজিওনাল হাব',
+    nameEn: 'Barami-Tok Regional Hub',
+    hubType: 'উত্তর কাপাসিয়া ডিস্ট্রিবিউশন হাব',
+    thanaId: 'kapasia',
+    thanaNameBn: 'কাপাসিয়া',
+    addressBn: 'টোক বাজার মোড়, কাপাসিয়া, গাজীপুর',
+    managerName: 'মাহমুদুল হক',
+    phone: '01622-998877',
+    coverageUnionIds: ['barishaba', 'karihata', 'sanmania', 'rayed', 'singhashree', 'tok', 'ghagatia'],
+    coverageUnions: ['বারিষাব', 'কড়িহাতা', 'সনমানিয়া', 'রায়েদ', 'সিংহশ্রী', 'টোক', 'ঘাগটিয়া'],
+    timing: 'সকাল ৭:০০ - রাত ৯:০০',
+    status: 'active',
+    staffCount: 4,
+    dailyDispatch: 30,
+  },
 ];
 
 export const SEED_CATEGORIES: Category[] = [

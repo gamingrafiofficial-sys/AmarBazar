@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
-import { Order, DeliveryRiderAccount, OrderStatus, RiderDepositRequest, PaymentTransactionRecord } from '../../types';
+import {
+  Order,
+  DeliveryRiderAccount,
+  OrderStatus,
+  RiderDepositRequest,
+  PaymentTransactionRecord,
+  OutletHub,
+} from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
 import { OrderChatModal } from '../common/OrderChatModal';
 import { OrderNoteSection } from '../common/OrderNoteSection';
 import { getNavigationUrl } from '../../lib/maps';
 import { calculateOrderFinancialSplit } from '../../lib/financialLedger';
-import { SEED_UNIONS } from '../../data/seedData';
+import { SEED_UNIONS, SEED_OUTLETS } from '../../data/seedData';
 import {
   Bike,
   MapPin,
@@ -34,6 +41,9 @@ import {
   Lock,
   CheckCheck,
   RefreshCw,
+  Store,
+  Home,
+  Package,
 } from 'lucide-react';
 
 interface RiderDashboardProps {
@@ -41,6 +51,9 @@ interface RiderDashboardProps {
   allOrders: Order[];
   depositRequests?: RiderDepositRequest[];
   paymentTransactions?: PaymentTransactionRecord[];
+  activeTab?: 'overview' | 'orders' | 'outlets' | 'profile';
+  onSelectTab?: (tab: 'overview' | 'orders' | 'outlets' | 'profile') => void;
+  outlets?: OutletHub[];
   onAcceptOrder: (orderId: string, rider: DeliveryRiderAccount) => Promise<void>;
   onCancelOrder?: (orderId: string, reason: string) => Promise<void> | void;
   onSubmitDeposit?: (amount: number, notes?: string) => Promise<void> | void;
@@ -57,6 +70,9 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   allOrders: inputAllOrders,
   depositRequests = [],
   paymentTransactions = [],
+  activeTab: controlledActiveTab,
+  onSelectTab,
+  outlets = SEED_OUTLETS,
   onAcceptOrder,
   onCancelOrder,
   onSubmitDeposit,
@@ -99,6 +115,37 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [handoverNotes, setHandoverNotes] = useState<string>('অফিসে ক্যাশ টাকা জমা দিয়েছি');
   const [depositSuccessMsg, setDepositSuccessMsg] = useState<string>('');
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
+
+  // Tab State: 'overview' (Home), 'orders' (Orders), 'outlets' (Area), 'profile' (Profile)
+  const [internalTab, setInternalTab] = useState<'overview' | 'orders' | 'outlets' | 'profile'>('overview');
+  const currentTab = controlledActiveTab || internalTab;
+  const setCurrentTab = (tab: 'overview' | 'orders' | 'outlets' | 'profile') => {
+    if (onSelectTab) onSelectTab(tab);
+    setInternalTab(tab);
+  };
+
+  // Filter Outlets matching Rider's assigned union(s) (Area tap Rider Union থাকা Outlet Show করবে)
+  const riderUnionOutlets = React.useMemo(() => {
+    const outletList = Array.isArray(outlets) && outlets.length > 0 ? outlets : SEED_OUTLETS;
+    const assigned = Array.isArray(rider.assignedUnionIds) ? rider.assignedUnionIds : [];
+    if (assigned.length === 0) {
+      return outletList.filter((o) => o.thanaId === (rider.thanaId || rider.area));
+    }
+    return outletList.filter((outlet) => {
+      const hasUnionMatch = assigned.some((uId) => outlet.coverageUnionIds?.includes(uId));
+      const hasThanaCentralMatch =
+        outlet.thanaId === (rider.thanaId || rider.area) && outlet.hubType?.includes('সেন্ট্রাল');
+      return hasUnionMatch || hasThanaCentralMatch;
+    });
+  }, [rider, outlets]);
+
+  const assignedUnionNames = React.useMemo(() => {
+    if (!rider.assignedUnionIds || rider.assignedUnionIds.length === 0) return [];
+    return rider.assignedUnionIds.map((uId) => {
+      const u = SEED_UNIONS.find((un) => un.id === uId);
+      return u ? u.nameBn : uId;
+    });
+  }, [rider.assignedUnionIds]);
 
   // Rider Order Release / Cancel Modal State
   const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -295,91 +342,43 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* Top Rider Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-xs mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold shrink-0 border border-amber-200">
-            <Bike className="w-7 h-7" />
+      {/* Top Lightweight Header for Rider Pages */}
+      <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-2xs mb-5 flex items-center justify-between gap-3">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold shrink-0 border border-amber-200">
+            <Bike className="w-5 h-5 text-amber-800" />
           </div>
           <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-lg font-bold text-slate-900">{rider.name}</h1>
-              <span className="bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2 py-0.5 rounded-full">
-                রাইডার আইডি: {rider.id}
-              </span>
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1">
-                <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="font-mono">{rider.phone}</span>
-              </span>
-              <span>•</span>
-              <span className="font-bold text-slate-700">
-                থানা: {rider.area === 'kapasia' ? 'কাপাসিয়া' : 'কালীগঞ্জ'}
-              </span>
-            </div>
-
-            {/* Assigned Unions Badges */}
-            <div className="mt-2 flex flex-wrap items-center gap-1">
-              <span className="text-[11px] font-bold text-slate-600 mr-1 flex items-center gap-1">
-                <Layers className="w-3 h-3 text-emerald-700" />
-                <span>নির্ধারিত ইউনিয়ন ({rider.assignedUnionIds?.length || 0}টি):</span>
-              </span>
-              {rider.assignedUnionIds && rider.assignedUnionIds.length > 0 ? (
-                rider.assignedUnionIds.map((uId) => {
-                  const uObj = SEED_UNIONS.find((u) => u.id === uId);
-                  return (
-                    <span
-                      key={uId}
-                      className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    >
-                      {uObj ? uObj.nameBn : uId}
-                    </span>
-                  );
-                })
-              ) : (
-                <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  সকল ইউনিয়ন
-                </span>
-              )}
-            </div>
+            <h1 className="text-sm font-extrabold text-slate-900 leading-tight">
+              {currentTab === 'overview' && (language === 'bn' ? 'রাইডার ওভারভিউ' : 'Rider Overview')}
+              {currentTab === 'orders' && (language === 'bn' ? 'অর্ডারসমূহ' : 'Orders')}
+              {currentTab === 'outlets' && (language === 'bn' ? 'আমার এরিয়ার আউটলেট' : 'Union Outlets')}
+              {currentTab === 'profile' && (language === 'bn' ? 'রাইডার প্রোফাইল' : 'Rider Profile')}
+            </h1>
+            <p className="text-[11px] text-slate-500 font-medium">
+              {rider.name} • {rider.area === 'kapasia' ? 'কাপাসিয়া' : 'কালীগঞ্জ'}
+            </p>
           </div>
         </div>
 
-        {/* Online / Offline Toggle & Logout */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center space-x-2 bg-slate-50 p-2 sm:p-2.5 rounded-2xl border border-slate-200">
-            <span className="text-xs font-semibold text-slate-700 hidden sm:inline">
-              {language === 'bn' ? 'ডিউটি স্ট্যাটাস:' : 'Duty Status:'}
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => onToggleOnline(!rider.isOnline)}
+            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer ${
+              rider.isOnline
+                ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/30'
+                : 'bg-slate-400 text-white'
+            }`}
+            title={language === 'bn' ? 'ডিউটি স্ট্যাটাস পরিবর্তন করুন' : 'Toggle duty status'}
+          >
+            <span className={`w-2 h-2 rounded-full ${rider.isOnline ? 'bg-amber-300 animate-ping' : 'bg-slate-200'}`}></span>
+            <span>
+              {rider.isOnline
+                ? (language === 'bn' ? 'অনলাইন (সক্রিয়)' : 'Online')
+                : (language === 'bn' ? 'অফলাইন' : 'Offline')}
             </span>
-            <button
-              onClick={() => onToggleOnline(!rider.isOnline)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 ${
-                rider.isOnline
-                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/30'
-                  : 'bg-slate-400 text-white'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${rider.isOnline ? 'bg-amber-300 animate-ping' : 'bg-slate-200'}`}></span>
-              <span>
-                {rider.isOnline
-                  ? (language === 'bn' ? 'অনলাইন (সক্রিয়)' : 'Online (Active)')
-                  : (language === 'bn' ? 'অফলাইন' : 'Offline')}
-              </span>
-            </button>
-          </div>
-
-          {onLogout && (
-            <button
-              type="button"
-              onClick={onLogout}
-              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3 py-2.5 rounded-2xl flex items-center gap-1.5 transition-colors shadow-2xs"
-              title={language === 'bn' ? 'রাইডার অ্যাকাউন্ট লগআউট করুন' : 'Log out rider account'}
-            >
-              <LogOut className="w-3.5 h-3.5 text-rose-600" />
-              <span>{language === 'bn' ? 'লগআউট' : 'Logout'}</span>
-            </button>
-          )}
+          </button>
         </div>
       </div>
 
@@ -435,8 +434,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         </div>
       )}
 
-      {/* Date-wise Filtering Bar */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-2xs mb-6">
+      {/* ========================================================================= */}
+      {/* 1. OVERVIEW TAB: Metrics & Cash Office Deposits (হোম / ওভারভিউ সেকশন) */}
+      {/* ========================================================================= */}
+      {currentTab === 'overview' && (
+        <div className="space-y-6 mb-8">
+          {/* Date-wise Filtering Bar */}
+          <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-2xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
@@ -639,6 +643,172 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Quick Hub Shortcuts */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <button
+          type="button"
+          onClick={() => setCurrentTab('orders')}
+          className="p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-2xl flex items-center justify-between text-left transition-colors cursor-pointer group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-900">
+                ইনকামিং ও সক্রিয় অর্ডারসমূহ
+              </h4>
+              <p className="text-[11px] text-slate-600">
+                {incomingAvailableOrders.length} টি নতুন অর্ডার অপেক্ষা করছে • {myActiveDeliveries.length} টি সক্রিয়
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-emerald-700 group-hover:translate-x-1 transition-transform" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentTab('outlets')}
+          className="p-4 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-2xl flex items-center justify-between text-left transition-colors cursor-pointer group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold">
+              <Store className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-900">
+                আমার ইউনিয়নের আউটলেট হাব
+              </h4>
+              <p className="text-[11px] text-slate-600">
+                {riderUnionOutlets.length} টি আউটলেট পয়েন্ট • ম্যানেজার ফোন নম্বর ও ঠিকানা
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-amber-700 group-hover:translate-x-1 transition-transform" />
+        </button>
+      </div>
+
+      {/* SECTION 4: CASH DEPOSIT REQUESTS & OFFICE MEMOS */}
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-emerald-700" />
+              <span>ক্যাশ জমার রিকোয়েস্ট ও পেমেন্ট মেমো ({myDepositRequests.length})</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              অফিসে টাকা জমা দেওয়ার রিকোয়েস্ট স্ট্যাটাস, এডমিনের অনুমোদন এবং ট্রানজাকশন মেমো
+            </p>
+          </div>
+          {cashInHand > 0 && (
+            <button
+              onClick={() => {
+                setHandoverAmount(cashInHand);
+                setShowHandoverModal(true);
+              }}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors shadow-2xs self-start sm:self-auto flex items-center gap-1.5 cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>নতুন জমার রিকোয়েস্ট পাঠান</span>
+            </button>
+          )}
+        </div>
+
+        {myDepositRequests.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            আপনার কোনো ক্যাশ জমার রিকোয়েস্ট বা মেমো এখনো নেই। ডেলিভারি শেষে ক্যাশ জমা দিতে উপরে বাটনে চাপুন।
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myDepositRequests.map((req) => (
+              <div
+                key={req.id}
+                className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2 flex-wrap gap-1">
+                    <span className="font-mono font-bold text-slate-900">ID: #{req.id}</span>
+                    {req.status === 'pending' && (
+                      <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                        <span>অপেক্ষমান (এডমিন ভেরিফিকেশন চলছে)</span>
+                      </span>
+                    )}
+                    {req.status === 'approved' && (
+                      <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCheck className="w-3 h-3 text-emerald-700" />
+                        <span>অনুমোদিত • ক্যাশ অফিসে গৃহীত</span>
+                      </span>
+                    )}
+                    {req.status === 'rejected' && (
+                      <span className="bg-rose-100 text-rose-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <XCircle className="w-3 h-3 text-rose-700" />
+                        <span>প্রত্যাখ্যাত (ব্যালেন্স বৃদ্ধি বহাল)</span>
+                      </span>
+                    )}
+                    {req.voucherId && (
+                      <span className="bg-blue-100 text-blue-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                        মেমো: {req.voucherId}
+                      </span>
+                    )}
+                  </div>
+
+                  {req.notes && (
+                    <p className="text-slate-600">
+                      <strong>রাইডার নোট:</strong> {req.notes}
+                    </p>
+                  )}
+
+                  {req.adminNotes && (
+                    <p className="text-slate-700 bg-white p-2 rounded-xl border border-slate-200 text-[11px] mt-1 inline-block">
+                      <strong>🏢 অফিস মন্তব্য:</strong> {req.adminNotes}
+                    </p>
+                  )}
+
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    রিকোয়েস্টের সময়: {new Date(req.createdAt).toLocaleString('bn-BD', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </p>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] text-slate-400 block">জমার পরিমাণ</span>
+                  <span className="font-mono font-black text-base text-emerald-900">
+                    {formatBDT(req.amount)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  {/* ========================================================================= */}
+  {/* 2. ORDERS TAB: Incoming Orders, Active Deliveries & History (অর্ডার সেকশন) */}
+  {/* ========================================================================= */}
+  {currentTab === 'orders' && (
+    <div className="space-y-8 mb-8">
+      {/* Duty status reminder if offline */}
+      {!rider.isOnline && (
+        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center text-xs text-amber-900 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0" />
+            <span>আপনি বর্তমানে <strong>অফলাইনে</strong> আছেন। নতুন অর্ডার পাওয়ার জন্য ডিউটি স্ট্যাটাস অন করুন।</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToggleOnline(true)}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-1.5 rounded-xl text-xs shrink-0 cursor-pointer shadow-xs"
+          >
+            অনলাইন চালু করুন
+          </button>
+        </div>
+      )}
 
       {/* SECTION 1: INCOMING ORDERS (Real-time accept for online riders) */}
       {rider.isOnline ? (
@@ -987,103 +1157,291 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           </div>
         )}
       </div>
+    </div>
+  )}
 
-      {/* SECTION 4: CASH DEPOSIT REQUESTS & OFFICE MEMOS */}
-      <div className="mb-8 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Banknote className="w-4 h-4 text-emerald-700" />
-              <span>ক্যাশ জমার রিকোয়েস্ট ও পেমেন্ট মেমো ({myDepositRequests.length})</span>
+  {/* ========================================================================= */}
+  {/* 3. OUTLETS TAB: Rider Union Outlets (এরিয়া ট্যাপে রাইডার ইউনিয়নের আউটলেট) */}
+  {/* ========================================================================= */}
+  {currentTab === 'outlets' && (
+    <div className="space-y-6 mb-8">
+      <div className="bg-emerald-800 text-white p-5 sm:p-6 rounded-3xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Store className="w-5 h-5 text-amber-300" />
+            <h2 className="text-base sm:text-lg font-black">
+              {language === 'bn' ? 'আমার ইউনিয়নের আউটলেট হাবসমূহ' : 'My Union Outlets & Hubs'}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              অফিসে টাকা জমা দেওয়ার রিকোয়েস্ট স্ট্যাটাস, এডমিনের অনুমোদন এবং ট্রানজাকশন মেমো
-            </p>
+            <span className="bg-emerald-700 text-emerald-100 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-600">
+              {riderUnionOutlets.length} টি আউটলেট
+            </span>
           </div>
-          {cashInHand > 0 && (
-            <button
-              onClick={() => {
-                setHandoverAmount(cashInHand);
-                setShowHandoverModal(true);
-              }}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors shadow-2xs self-start sm:self-auto flex items-center gap-1.5"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>নতুন জমার রিকোয়েস্ট পাঠান</span>
-            </button>
-          )}
+          <p className="text-xs text-emerald-100 leading-relaxed max-w-2xl">
+            {language === 'bn'
+              ? `আপনার নির্ধারিত থানা (${rider.thanaNameBn || rider.area || 'কালীগঞ্জ'}) ও ইউনিয়নের ডেলিভারি অর্ডারগুলো নিচের আউটলেট পয়েন্টগুলো থেকে সংগ্রহ (Pick-up) করতে পারবেন। যেকোনো প্রয়োজনে আউটলেট ম্যানেজারের সাথে সরাসরি যোগাযোগ করুন।`
+              : `Outlets and delivery distribution hubs serving your assigned union area. Call the hub manager directly for pickup and stock inquiries.`}
+          </p>
         </div>
+        <div className="bg-emerald-900/60 border border-emerald-700/60 rounded-2xl px-3.5 py-2 shrink-0 text-right">
+          <span className="text-[10px] text-emerald-300 block">আপনার নির্ধারিত ইউনিয়ন</span>
+          <span className="text-xs font-bold text-amber-300">
+            {assignedUnionNames.join(', ') || 'সকল ইউনিয়ন'}
+          </span>
+        </div>
+      </div>
 
-        {myDepositRequests.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-            আপনার কোনো ক্যাশ জমার রিকোয়েস্ট বা মেমো এখনো নেই। ডেলিভারি শেষে ক্যাশ জমা দিতে উপরে বাটনে চাপুন।
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {myDepositRequests.map((req) => (
-              <div
-                key={req.id}
-                className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-2 flex-wrap gap-1">
-                    <span className="font-mono font-bold text-slate-900">ID: #{req.id}</span>
-                    {req.status === 'pending' && (
-                      <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-amber-700 animate-spin" />
-                        <span>অপেক্ষমান (এডমিন ভেরিফিকেশন চলছে)</span>
-                      </span>
-                    )}
-                    {req.status === 'approved' && (
-                      <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CheckCheck className="w-3 h-3 text-emerald-700" />
-                        <span>অনুমোদিত • ক্যাশ অফিসে গৃহীত</span>
-                      </span>
-                    )}
-                    {req.status === 'rejected' && (
-                      <span className="bg-rose-100 text-rose-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <XCircle className="w-3 h-3 text-rose-700" />
-                        <span>প্রত্যাখ্যাত (ব্যালেন্স বৃদ্ধি বহাল)</span>
-                      </span>
-                    )}
-                    {req.voucherId && (
-                      <span className="bg-blue-100 text-blue-900 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
-                        মেমো: {req.voucherId}
-                      </span>
-                    )}
+      {riderUnionOutlets.length === 0 ? (
+        <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center text-slate-500">
+          <Store className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+          <h4 className="font-bold text-slate-800 text-sm mb-1">কোনো আউটলেট পাওয়া যায়নি</h4>
+          <p className="text-xs text-slate-500">আপনার নির্ধারিত ইউনিয়নের জন্য বর্তমানে কোনো আউটলেট তালিকাভুক্ত নেই।</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {riderUnionOutlets.map((outlet) => (
+            <div
+              key={outlet.id}
+              className="bg-white rounded-3xl border-2 border-slate-200 hover:border-emerald-500 transition-all p-5 sm:p-6 shadow-xs flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-100 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                        {outlet.nameBn}
+                      </h3>
+                      {outlet.status === 'active' ? (
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                          সক্রিয়
+                        </span>
+                      ) : (
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          স্থগিত
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                      {outlet.hubType} • {outlet.thanaNameBn}
+                    </p>
                   </div>
-
-                  {req.notes && (
-                    <p className="text-slate-600">
-                      <strong>রাইডার নোট:</strong> {req.notes}
-                    </p>
-                  )}
-
-                  {req.adminNotes && (
-                    <p className="text-slate-700 bg-white p-2 rounded-xl border border-slate-200 text-[11px] mt-1 inline-block">
-                      <strong>🏢 অফিস মন্তব্য:</strong> {req.adminNotes}
-                    </p>
-                  )}
-
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    রিকোয়েস্টের সময়: {new Date(req.createdAt).toLocaleString('bn-BD', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
-                  </p>
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+                    <Store className="w-5 h-5" />
+                  </div>
                 </div>
 
-                <div className="text-right shrink-0">
-                  <span className="text-[10px] text-slate-400 block">জমার পরিমাণ</span>
-                  <span className="font-mono font-black text-base text-emerald-900">
-                    {formatBDT(req.amount)}
-                  </span>
+                <div className="space-y-2 text-xs text-slate-600 mb-4">
+                  <p className="flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <span><strong className="text-slate-800">ঠিকানা:</strong> {outlet.addressBn}</span>
+                  </p>
+                  <p className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span><strong className="text-slate-800">অপারেটিং সময়:</strong> {outlet.timing}</span>
+                  </p>
+                  <div className="pt-1">
+                    <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                      কভারেজ ইউনিয়নসমূহ:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {outlet.coverageUnions?.map((uName, idx) => {
+                        const isRiderCoverage = assignedUnionNames.includes(uName);
+                        return (
+                          <span
+                            key={idx}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                              isRiderCoverage
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300 ring-1 ring-emerald-400/40'
+                                : 'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {isRiderCoverage ? '★ ' : ''}{uName}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+
+              {/* Bottom In-Charge Contact & Quick Action */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">ইন-চার্জ ম্যানেজার</span>
+                  <span className="text-xs font-bold text-slate-800">{outlet.managerName}</span>
+                </div>
+                <a
+                  href={`tel:${outlet.phone}`}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>কল দিন: {outlet.phone}</span>
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* ========================================================================= */}
+  {/* 4. PROFILE TAB: Rider Profile, Unions & Duty Status (রাইডার প্রোফাইল পেজ) */}
+  {/* ========================================================================= */}
+  {currentTab === 'profile' && (
+    <div className="space-y-6 mb-8">
+      {/* Main Rider Profile Card */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold shrink-0 border border-amber-200 shadow-2xs">
+              <Bike className="w-8 h-8 text-amber-800" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2 flex-wrap gap-1">
+                <h2 className="text-xl font-black text-slate-900">{rider.name}</h2>
+                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  রাইডার আইডি: {rider.id}
+                </span>
+              </div>
+              <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-2">
+                <a
+                  href={`tel:${rider.phone}`}
+                  className="flex items-center gap-1 font-mono font-bold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{rider.phone}</span>
+                </a>
+                <span>•</span>
+                <span className="font-bold text-slate-700">
+                  থানা: {rider.area === 'kapasia' ? 'কাপাসিয়া' : 'কালীগঞ্জ'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Online / Offline Duty Switch */}
+          <div className="flex items-center space-x-2 bg-slate-50 p-3 rounded-2xl border border-slate-200 self-start sm:self-auto">
+            <span className="text-xs font-bold text-slate-700">
+              {language === 'bn' ? 'ডিউটি স্ট্যাটাস:' : 'Duty Status:'}
+            </span>
+            <button
+              type="button"
+              onClick={() => onToggleOnline(!rider.isOnline)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer ${
+                rider.isOnline
+                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/30'
+                  : 'bg-slate-400 text-white'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${rider.isOnline ? 'bg-amber-300 animate-ping' : 'bg-slate-200'}`}></span>
+              <span>
+                {rider.isOnline
+                  ? (language === 'bn' ? 'অনলাইন (সক্রিয়)' : 'Online (Active)')
+                  : (language === 'bn' ? 'অফলাইন' : 'Offline')}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Assigned Unions Section */}
+        <div className="py-4 border-b border-slate-100">
+          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+            <Layers className="w-4 h-4 text-emerald-700" />
+            <span>আপনার নির্ধারিত ডেলিভারি ইউনিয়নসমূহ ({rider.assignedUnionIds?.length || 0}টি):</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {rider.assignedUnionIds && rider.assignedUnionIds.length > 0 ? (
+              rider.assignedUnionIds.map((uId) => {
+                const uObj = SEED_UNIONS.find((u) => u.id === uId);
+                return (
+                  <span
+                    key={uId}
+                    className="bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs font-bold px-3 py-1 rounded-xl shadow-2xs"
+                  >
+                    {uObj ? uObj.nameBn : uId}
+                  </span>
+                );
+              })
+            ) : (
+              <span className="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-xl">
+                সকল ইউনিয়ন (আন-রেস্ট্রিক্টেড)
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-2">
+            * কাস্টমাররা এই ইউনিয়নগুলো থেকে কোনো অর্ডার করলে স্বয়ংক্রিয়ভাবে আপনার অর্ডার ট্যাবে চলে আসবে।
+          </p>
+        </div>
+
+        {/* Account Financial & Delivery Summary */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-4">
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <span className="text-[11px] text-slate-500 font-medium block">হাতে নগদ ক্যাশ ব্যালেন্স</span>
+              <span className="text-lg font-black text-rose-700 font-mono mt-0.5 block">{formatBDT(cashInHand)}</span>
+              <span className="text-[10px] text-slate-400">{cashInHand > 0 ? 'অফিসে জমা প্রদেয়' : 'পরিশোধিত'}</span>
+            </div>
+            {cashInHand > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHandoverAmount(cashInHand);
+                  setShowHandoverModal(true);
+                }}
+                className="mt-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition-colors shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <Banknote className="w-3.5 h-3.5" />
+                <span>অফিসে জমা দিন</span>
+              </button>
+            )}
+          </div>
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] text-slate-500 font-medium block">সর্বমোট সম্পন্ন ডেলিভারি</span>
+            <span className="text-lg font-black text-slate-900 mt-0.5 block">{allMyDeliveredOrders.length} টি</span>
+            <span className="text-[10px] text-emerald-700 font-medium">সফল ডেলিভারি</span>
+          </div>
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] text-slate-500 font-medium block">সর্বমোট অর্জিত আয়</span>
+            <span className="text-lg font-black text-emerald-800 font-mono mt-0.5 block">{formatBDT(riderTotalEarnings)}</span>
+            <span className="text-[10px] text-slate-400">ট্রিপ কমিশন ও ফি</span>
+          </div>
+        </div>
+
+        {/* Emergency Hotline & Help */}
+        <div className="bg-amber-50 rounded-2xl border border-amber-200 p-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-bold">জরুরি এডমিন অফিস হেল্পলাইন</h4>
+              <p className="text-[11px] text-amber-800 mt-0.5">যেকোনো টেকনিক্যাল সমস্যা, ক্যাশ মেমো ভেরিফিকেশন বা ইউনিয়ন পরিবর্তনের জন্য অফিসে যোগাযোগ করুন।</p>
+            </div>
+          </div>
+          <a
+            href="tel:01403751400"
+            className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs shrink-0 cursor-pointer"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>অফিসে কল দিন</span>
+          </a>
+        </div>
+
+        {/* Logout Action */}
+        {onLogout && (
+          <div className="pt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 transition-colors shadow-2xs cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 text-rose-600" />
+              <span>রাইডার অ্যাকাউন্ট লগআউট করুন</span>
+            </button>
           </div>
         )}
       </div>
+    </div>
+  )}
 
       {/* Rider Cancel / Release Order Modal */}
       {cancelOrderId && (

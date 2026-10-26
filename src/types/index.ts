@@ -56,6 +56,7 @@ export interface DeliveryRiderAccount {
   password?: string;
   area: string; // Thana ID e.g. 'kaliganj' | 'kapasia'
   thanaId?: string;
+  thanaNameBn?: string;
   assignedUnionIds: string[]; // List of assigned union IDs for order routing
   isOnline: boolean;
   isActive: boolean;
@@ -95,6 +96,24 @@ export interface Market {
   radiusKm: number;
   isActive: boolean;
   createdAt?: string;
+}
+
+export interface OutletHub {
+  id: string;
+  nameBn: string;
+  nameEn: string;
+  hubType: string;
+  thanaId: string;
+  thanaNameBn: string;
+  addressBn: string;
+  managerName: string;
+  phone: string;
+  coverageUnionIds: string[];
+  coverageUnions: string[];
+  timing: string;
+  status: 'active' | 'paused';
+  staffCount?: number;
+  dailyDispatch?: number;
 }
 
 export interface Shop {
