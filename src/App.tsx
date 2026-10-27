@@ -89,7 +89,7 @@ const dedupeOrders = (orderList: Order[]): Order[] => {
 function MarketplaceMain() {
   const { language } = useLanguage();
   const { role, setRole } = useAuth();
-  const { items } = useCart();
+  const { items, syncWithProducts } = useCart();
 
   // Dynamic Markets / Areas (Admin Controlled, Default Kaliganj & Kapasia in Gazipur)
   const [markets, setMarkets] = useState<Market[]>(SEED_MARKETS);
@@ -103,6 +103,13 @@ function MarketplaceMain() {
   const [products, setProducts] = useState<Product[]>(SEED_PRODUCTS);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Keep cart items and prices strictly synchronized with live product updates
+  useEffect(() => {
+    if (products.length > 0) {
+      syncWithProducts(products);
+    }
+  }, [products, syncWithProducts]);
 
   // Orders & Riders
   const [orders, setOrders] = useState<Order[]>(() => dedupeOrders(SEED_ORDERS));
@@ -1027,13 +1034,20 @@ function MarketplaceMain() {
   // Admin Updates Product (Edit fields such as price, stock, name, category, etc.)
   const handleUpdateProduct = async (prodId: string, updates: Partial<Product>) => {
     // Optimistic UI update
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === prodId
-          ? { ...p, ...updates, updatedAt: new Date().toISOString() }
-          : p
-      )
+    const updatedProducts = products.map((p) =>
+      p.id === prodId
+        ? { ...p, ...updates, updatedAt: new Date().toISOString() }
+        : p
     );
+    setProducts(updatedProducts);
+
+    // Immediately synchronize active cart items and price calculations
+    syncWithProducts(updatedProducts);
+
+    // Keep selected product updated if viewed
+    if (selectedProduct && selectedProduct.id === prodId) {
+      setSelectedProduct((prev) => (prev ? { ...prev, ...updates } : null));
+    }
 
     // Persist updates to Firebase Firestore
     try {
@@ -1391,7 +1405,7 @@ function MarketplaceMain() {
             {/* PAGE 2: PRODUCT VIEW PAGE (Detailed view + Related Products) */}
             {currentPage === 'product_view' && selectedProduct && (
               <ProductViewPage
-                product={selectedProduct}
+                product={products.find((p) => p.id === selectedProduct.id) || selectedProduct}
                 allProducts={products}
                 onBack={() => setCurrentPage('catalog')}
                 onSelectProduct={(p) => {
@@ -1413,6 +1427,7 @@ function MarketplaceMain() {
                 markets={markets}
                 unions={unions}
                 initialUnionId={selectedUnionId}
+                products={products}
                 onRequireLogin={() => {
                   setCurrentPage('login');
                   window.scrollTo({ top: 0, behavior: 'smooth' });

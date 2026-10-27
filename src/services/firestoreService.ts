@@ -59,30 +59,14 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
       }
     }
 
-    // 2. Seed Products (Ensuring the user's 55 products across 3 categories are populated)
+    // 2. Seed Products (Only if Firestore products collection is completely empty, never overwriting admin edits)
     const productsSnap = await getDocs(collection(db, PRODUCTS_COL));
-    const shouldSyncProducts =
-      productsSnap.empty ||
-      productsSnap.size < 50 ||
-      productsSnap.docs.some((d) => {
-        const cat = d.data()?.categoryId;
-        return cat && !['daily_products', 'personal_care', 'fuel_energy'].includes(cat);
-      });
-
-    if (shouldSyncProducts) {
-      console.log('🔄 Syncing 55 products to Firestore catalog...');
-      // Remove obsolete/legacy products if present
-      for (const d of productsSnap.docs) {
-        const cat = d.data()?.categoryId;
-        if (cat && !['daily_products', 'personal_care', 'fuel_energy'].includes(cat)) {
-          await deleteDoc(d.ref);
-        }
-      }
-      // Populate/upsert user's 55 products
+    if (productsSnap.empty) {
+      console.log('🔄 Initializing empty Firestore products catalog with seed products...');
       for (const p of SEED_PRODUCTS) {
-        await setDoc(doc(db, PRODUCTS_COL, p.id), p, { merge: true });
+        await setDoc(doc(db, PRODUCTS_COL, p.id), p);
       }
-      console.log('✅ 55 products catalog successfully synced to Firestore.');
+      console.log('✅ Initial products catalog successfully seeded to Firestore.');
     }
 
     // 3. Seed Riders

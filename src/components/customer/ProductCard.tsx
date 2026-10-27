@@ -95,7 +95,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelectProdu
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                updateQuantity(product.id, currentQuantity - 1);
+                updateQuantity(product.id, currentQuantity - 1, product);
               }}
               className="w-5 sm:w-6 h-5 sm:h-6 rounded-lg bg-white text-emerald-800 hover:bg-emerald-100 flex items-center justify-center font-bold shadow-2xs"
             >
@@ -107,7 +107,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelectProdu
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                updateQuantity(product.id, currentQuantity + 1);
+                updateQuantity(product.id, currentQuantity + 1, product);
               }}
               disabled={currentQuantity >= product.stock}
               className="w-5 sm:w-6 h-5 sm:h-6 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-40 flex items-center justify-center font-bold shadow-2xs"

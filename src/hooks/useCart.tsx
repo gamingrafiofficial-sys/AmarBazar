@@ -5,7 +5,7 @@ interface CartContextType {
   items: CartItem[];
   shopId: string | null;
   addToCart: (product: Product, quantity?: number) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  updateQuantity: (productId: string, quantity: number, updatedProduct?: Product) => void;
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
   subtotal: number;
@@ -14,6 +14,7 @@ interface CartContextType {
   pendingItem: { product: Product; quantity: number } | null;
   confirmClearAndAdd: () => void;
   cancelAddDifferentShop: () => void;
+  syncWithProducts: (products: Product[]) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -51,6 +52,38 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   }, [items, shopId]);
 
+  // Synchronize cart items with the latest product catalog (price, name, stock, availability)
+  const syncWithProducts = React.useCallback((products: Product[]) => {
+    if (!Array.isArray(products) || products.length === 0) return;
+    setItems((prev) => {
+      let hasChanges = false;
+      const updated = prev.map((item) => {
+        const latest = products.find((p) => p.id === item.product.id);
+        if (latest) {
+          if (
+            latest.price !== item.product.price ||
+            latest.nameBn !== item.product.nameBn ||
+            latest.nameEn !== item.product.nameEn ||
+            latest.stock !== item.product.stock ||
+            latest.isAvailable !== item.product.isAvailable ||
+            latest.unit !== item.product.unit ||
+            latest.imageUrl !== item.product.imageUrl ||
+            latest.shopId !== item.product.shopId
+          ) {
+            hasChanges = true;
+            return {
+              ...item,
+              product: { ...item.product, ...latest },
+              quantity: Math.min(latest.stock, item.quantity),
+            };
+          }
+        }
+        return item;
+      });
+      return hasChanges ? updated : prev;
+    });
+  }, []);
+
   const addToCart = (product: Product, quantity: number = 1) => {
     if (items.length > 0 && shopId && shopId !== product.shopId) {
       // Trigger Single-Shop Rule Modal
@@ -65,18 +98,22 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (existing) {
         return prev.map((i) =>
           i.product.id === product.id
-            ? { ...i, quantity: Math.min(product.stock, i.quantity + quantity) }
+            ? {
+                ...i,
+                product: { ...product }, // Always adopt latest product price and specs
+                quantity: Math.min(product.stock, i.quantity + quantity),
+              }
             : i
         );
       }
-      return [...prev, { product, quantity: Math.min(product.stock, quantity) }];
+      return [...prev, { product: { ...product }, quantity: Math.min(product.stock, quantity) }];
     });
   };
 
   const confirmClearAndAdd = () => {
     if (pendingItem) {
       setShopId(pendingItem.product.shopId);
-      setItems([{ product: pendingItem.product, quantity: pendingItem.quantity }]);
+      setItems([{ product: { ...pendingItem.product }, quantity: pendingItem.quantity }]);
     }
     setPendingItem(null);
     setDifferentShopModalOpen(false);
@@ -87,7 +124,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDifferentShopModalOpen(false);
   };
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = (productId: string, quantity: number, updatedProduct?: Product) => {
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
@@ -95,7 +132,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setItems((prev) =>
       prev.map((i) => {
         if (i.product.id === productId) {
-          return { ...i, quantity: Math.min(i.product.stock, quantity) };
+          const prod = updatedProduct ? { ...i.product, ...updatedProduct } : i.product;
+          return { ...i, product: prod, quantity: Math.min(prod.stock, quantity) };
         }
         return i;
       })
@@ -137,6 +175,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         pendingItem,
         confirmClearAndAdd,
         cancelAddDifferentShop,
+        syncWithProducts,
       }}
     >
       {children}

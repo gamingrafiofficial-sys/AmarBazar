@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../hooks/useLanguage';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
-import { Market, Order, UnionArea } from '../types';
+import { Market, Order, UnionArea, Product } from '../types';
 import { SEED_UNIONS, SEED_MARKETS } from '../data/seedData';
 import {
   ShoppingCart,
@@ -36,6 +36,7 @@ interface CartPageProps {
   unions?: UnionArea[];
   initialUnionId?: string;
   onRequireLogin?: () => void;
+  products?: Product[];
 }
 
 export const CartPage: React.FC<CartPageProps> = ({
@@ -47,10 +48,18 @@ export const CartPage: React.FC<CartPageProps> = ({
   unions = SEED_UNIONS,
   initialUnionId,
   onRequireLogin,
+  products = [],
 }) => {
   const { language, formatBDT } = useLanguage();
-  const { items, subtotal, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { items, subtotal, updateQuantity, removeFromCart, clearCart, syncWithProducts } = useCart();
   const { role } = useAuth();
+
+  // Keep cart items and prices immediately synchronized with live product updates
+  useEffect(() => {
+    if (products && products.length > 0) {
+      syncWithProducts(products);
+    }
+  }, [products, syncWithProducts]);
 
   // Selected Thana and Union for the delivery
   const [selectedThanaId, setSelectedThanaId] = useState<string>(currentArea?.id || 'kaliganj');
@@ -135,10 +144,18 @@ export const CartPage: React.FC<CartPageProps> = ({
         thanaNameBn: selectedThana?.nameBn || currentArea.nameBn,
         unionId: selectedUnionId,
         unionNameBn: selectedUnion?.nameBn || 'সদর',
-        items: items.map((i) => ({
-          productId: i.product.id,
-          quantity: i.quantity,
-        })),
+        items: items.map((i) => {
+          const liveProd = products?.find((p) => p.id === i.product.id) || i.product;
+          return {
+            productId: i.product.id,
+            quantity: i.quantity,
+            price: Number(liveProd.price),
+            nameBn: liveProd.nameBn,
+            nameEn: liveProd.nameEn,
+            unit: liveProd.unit,
+            lineTotal: Number(liveProd.price) * i.quantity,
+          };
+        }),
         customerName,
         customerPhone,
         deliveryAddress: `${deliveryAddress} (${selectedUnion?.nameBn || ''}, ${selectedThana?.nameBn || ''})`,
@@ -159,7 +176,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       if (res.ok) {
         placedOrder = await res.json();
       } else {
-        // Fallback robust order creation
+        // Fallback robust order creation with authoritative latest prices
         placedOrder = {
           id: `AB-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 90)}`,
           customerId: payload.customerId,
@@ -169,15 +186,19 @@ export const CartPage: React.FC<CartPageProps> = ({
           thanaNameBn: selectedThana?.nameBn || currentArea.nameBn,
           unionId: selectedUnionId,
           unionNameBn: selectedUnion?.nameBn || 'সদর',
-          items: items.map((i) => ({
-            productId: i.product.id,
-            nameEn: i.product.nameEn,
-            nameBn: i.product.nameBn,
-            price: i.product.price,
-            unit: i.product.unit,
-            quantity: i.quantity,
-            lineTotal: i.product.price * i.quantity,
-          })),
+          items: items.map((i) => {
+            const liveProd = products?.find((p) => p.id === i.product.id) || i.product;
+            const unitPrice = Number(liveProd.price);
+            return {
+              productId: i.product.id,
+              nameEn: liveProd.nameEn,
+              nameBn: liveProd.nameBn,
+              price: unitPrice,
+              unit: liveProd.unit,
+              quantity: i.quantity,
+              lineTotal: unitPrice * i.quantity,
+            };
+          }),
           subtotal,
           deliveryFee,
           totalAmount,
@@ -300,59 +321,64 @@ export const CartPage: React.FC<CartPageProps> = ({
 
             {/* Items list */}
             <div className="divide-y divide-slate-100">
-              {items.map((item) => (
-                <div
-                  key={item.product.id}
-                  className="py-3.5 flex items-center space-x-3 sm:space-x-4"
-                >
-                  <img
-                    src={item.product.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=150&q=80'}
-                    alt={item.product.nameEn}
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover bg-slate-50 border border-slate-200 shrink-0"
-                  />
-
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                      {language === 'bn' ? item.product.nameBn : item.product.nameEn}
-                    </h3>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs font-bold text-emerald-800">
-                        {formatBDT(item.product.price * item.quantity)}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        ({formatBDT(item.product.price)} x {item.quantity} {item.product.unit})
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Quantity Stepper */}
-                  <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-xl p-1 shrink-0">
-                    <button
-                      onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                      className="w-6 h-6 rounded-lg bg-white text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold shadow-2xs"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-6 text-center text-xs font-bold text-slate-800">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                      disabled={item.quantity >= item.product.stock}
-                      className="w-6 h-6 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-40 flex items-center justify-center font-bold shadow-2xs"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => removeFromCart(item.product.id)}
-                    className="text-slate-300 hover:text-rose-600 p-1.5 transition-colors"
+              {items.map((item) => {
+                const liveProd = products?.find((p) => p.id === item.product.id) || item.product;
+                const unitPrice = Number(liveProd.price);
+                const lineTotal = unitPrice * item.quantity;
+                return (
+                  <div
+                    key={item.product.id}
+                    className="py-3.5 flex items-center space-x-3 sm:space-x-4"
                   >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={liveProd.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=150&q=80'}
+                      alt={liveProd.nameEn}
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover bg-slate-50 border border-slate-200 shrink-0"
+                    />
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                        {language === 'bn' ? liveProd.nameBn : liveProd.nameEn}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs font-bold text-emerald-800">
+                          {formatBDT(lineTotal)}
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          ({formatBDT(unitPrice)} x {item.quantity} {liveProd.unit})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quantity Stepper */}
+                    <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200 rounded-xl p-1 shrink-0">
+                      <button
+                        onClick={() => updateQuantity(item.product.id, item.quantity - 1, liveProd)}
+                        className="w-6 h-6 rounded-lg bg-white text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold shadow-2xs"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="w-6 text-center text-xs font-bold text-slate-800">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => updateQuantity(item.product.id, item.quantity + 1, liveProd)}
+                        disabled={item.quantity >= liveProd.stock}
+                        className="w-6 h-6 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-40 flex items-center justify-center font-bold shadow-2xs"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => removeFromCart(item.product.id)}
+                      className="text-slate-300 hover:text-rose-600 p-1.5 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

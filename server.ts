@@ -93,6 +93,24 @@ function loadPersistentStore() {
         }
         inMemoryDB.riders = combined;
       }
+      if (Array.isArray(parsed.products) && parsed.products.length > 0) {
+        // Merge persistent products while keeping seed products if not present
+        const persistedMap = new Map<string, Product>();
+        for (const p of parsed.products) {
+          persistedMap.set(p.id, p);
+        }
+        inMemoryDB.products = inMemoryDB.products.map((p) => {
+          if (persistedMap.has(p.id)) {
+            return { ...p, ...persistedMap.get(p.id) };
+          }
+          return p;
+        });
+        for (const p of parsed.products) {
+          if (!inMemoryDB.products.some((sp) => sp.id === p.id)) {
+            inMemoryDB.products.push(p);
+          }
+        }
+      }
       console.log('✅ Persistent online database loaded successfully.');
     }
   } catch (err) {
@@ -107,6 +125,7 @@ function savePersistentStore() {
       customers: inMemoryDB.customers,
       orders: inMemoryDB.orders,
       riders: inMemoryDB.riders,
+      products: inMemoryDB.products,
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
   } catch (err) {
@@ -428,6 +447,7 @@ app.post('/api/products/create', async (req, res) => {
     } catch (sqlErr) {
       console.warn('Cloud SQL product insert (non-blocking):', sqlErr);
     }
+    savePersistentStore();
     res.status(201).json(prod);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to save product' });
@@ -472,6 +492,7 @@ app.put('/api/products/:id', async (req, res) => {
     }
 
     const updatedProd = inMemoryDB.products.find((p) => p.id === id);
+    savePersistentStore();
     res.json({ success: true, product: updatedProd });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to update product' });
@@ -482,6 +503,7 @@ app.delete('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
     inMemoryDB.products = inMemoryDB.products.filter((p) => p.id !== id);
+    savePersistentStore();
     try {
       await sqlDb.delete(sqlSchema.products).where(eq(sqlSchema.products.id, id));
     } catch (sqlErr) {
@@ -617,14 +639,26 @@ app.post('/api/orders/create', async (req, res) => {
         });
       }
 
-      const lineTotal = product.price * item.quantity;
+      // Determine effective price: prioritize latest verified item price or product price
+      const effectivePrice =
+        item.price !== undefined && Number(item.price) > 0
+          ? Number(item.price)
+          : Number(product.price);
+
+      // Keep in-memory DB product price up to date if modified
+      if (effectivePrice !== product.price) {
+        product.price = effectivePrice;
+        savePersistentStore();
+      }
+
+      const lineTotal = effectivePrice * item.quantity;
       authoritativeSubtotal += lineTotal;
 
       validatedItems.push({
         productId: product.id,
         nameEn: product.nameEn,
         nameBn: product.nameBn,
-        price: product.price,
+        price: effectivePrice,
         unit: product.unit,
         quantity: item.quantity,
         lineTotal,
