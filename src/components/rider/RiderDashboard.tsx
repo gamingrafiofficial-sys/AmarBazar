@@ -22,6 +22,11 @@ import {
   DEFAULT_DELIVERY_PRICING_CONFIG,
 } from '../../lib/deliveryPricing';
 import {
+  getAvailableSalaryCycles,
+  isTimestampInSalaryCycle,
+  getSalaryMonthCycle,
+} from '../../lib/salaryCycle';
+import {
   Bike,
   MapPin,
   Phone,
@@ -288,11 +293,13 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     return sum + split.riderPayout;
   }, 0);
 
-  // Current month string (e.g. "2026-10")
-  const currentMonthKey = React.useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // Current month salary cycle (1st to last-day 30th/31st with 1st of next month payout date)
+  const currentMonthCycle = React.useMemo(() => {
+    const now = new Date();
+    return getSalaryMonthCycle(now.getFullYear(), now.getMonth());
   }, []);
+
+  const currentMonthKey = currentMonthCycle.id;
 
   // Filter all salary payments received by this rider
   const mySalaryTransactions = React.useMemo(() => {
@@ -312,25 +319,25 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     );
   }, [mySalaryTransactions, currentMonthKey]);
 
-  // Rider's parcels delivered in the current month
+  // Rider's parcels delivered strictly in the current month cycle (1st 00:00:00 to last-day 23:59:59)
   const currentMonthDeliveredParcels = React.useMemo(() => {
     return allOrders.filter((o) => {
       if (o.riderId !== rider.id || o.orderStatus !== 'delivered') return false;
-      const dStr = o.updatedAt || o.createdAt || '';
-      return dStr.startsWith(currentMonthKey);
+      const dStr = o.updatedAt || o.createdAt;
+      return isTimestampInSalaryCycle(dStr, currentMonthCycle);
     });
-  }, [allOrders, rider.id, currentMonthKey]);
+  }, [allOrders, rider.id, currentMonthCycle]);
 
-  // Rider's parcels cancelled in the current month
+  // Rider's parcels cancelled in the current month cycle
   const currentMonthCancelledParcels = React.useMemo(() => {
     return allOrders.filter((o) => {
       if (o.riderId !== rider.id) return false;
       const isCancelled = o.orderStatus === 'cancelled' || o.isRiderCancelled;
       if (!isCancelled) return false;
-      const dStr = o.updatedAt || o.createdAt || '';
-      return dStr.startsWith(currentMonthKey);
+      const dStr = o.updatedAt || o.createdAt;
+      return isTimestampInSalaryCycle(dStr, currentMonthCycle);
     });
-  }, [allOrders, rider.id, currentMonthKey]);
+  }, [allOrders, rider.id, currentMonthCycle]);
 
   // Filter this rider's deposit requests
   const myDepositRequests = (depositRequests || []).filter((d) => d.riderId === rider.id);
@@ -781,16 +788,17 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                 <DollarSign className="w-4 h-4" />
               </span>
               <h2 className="text-base font-extrabold text-slate-900">
-                {language === 'bn' ? 'আমার মাসিক বেতন ও পেমেন্ট হিসাব' : 'My Monthly Salary & Payments'}
+                {language === 'bn' ? `${currentMonthCycle.monthNameBn} ${currentMonthCycle.year} – বেতন ও পেমেন্ট হিসাব` : 'My Monthly Salary & Payments'}
               </h2>
               <span className="bg-indigo-100 text-indigo-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                পে-আউট
+                ০১-{currentMonthCycle.daysInMonth} {currentMonthCycle.monthNameBn}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {language === 'bn'
-                ? 'মাসিক সফল ডেলিভারি পার্সেল সংখ্যা এবং অফিস থেকে প্রেরিত বেতনের ট্রানজাকশন আইডি (TrxID) হিসাব'
-                : 'Your monthly deliveries, earnings, and salary payment transactions with Trx ID'}
+            <p className="text-xs text-slate-600 mt-1">
+              📅 <strong>কার্যকাল:</strong> {currentMonthCycle.dateRangeBn} &nbsp;|&nbsp; 💰 <strong>নির্ধারিত বেতন ডেট:</strong> <span className="text-emerald-800 font-bold">{currentMonthCycle.payoutDateBn}</span>
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              💡 {currentMonthCycle.daysInMonth} তারিখ রাত ১১:৫৯ পর্যন্ত সম্পন্ন পার্সেল এই মাসের বেতনে যুক্ত; ১ তারিখ থেকে নতুন কাজ পরবর্তী মাসে যোগ হবে।
             </p>
           </div>
 

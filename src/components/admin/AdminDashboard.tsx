@@ -24,6 +24,12 @@ import {
   DEFAULT_DELIVERY_PRICING_CONFIG,
 } from '../../lib/deliveryPricing';
 import {
+  getAvailableSalaryCycles,
+  isTimestampInSalaryCycle,
+  getSalaryMonthCycle,
+  SalaryMonthCycle,
+} from '../../lib/salaryCycle';
+import {
   ShieldAlert,
   Package,
   Plus,
@@ -550,45 +556,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   });
 
-  // Available Months for Salary Selection (current month, last 6 months)
-  const availableSalaryMonths = React.useMemo(() => {
-    const list: { id: string; labelBn: string; labelEn: string }[] = [];
-    const now = new Date();
-    const bnMonths = [
-      'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
-      'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
-    ];
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const year = d.getFullYear();
-      const monthNum = d.getMonth() + 1;
-      const monthStr = String(monthNum).padStart(2, '0');
-      const id = `${year}-${monthStr}`;
-      const labelBn = `${bnMonths[d.getMonth()]} ${year}`;
-      const labelEn = `${d.toLocaleString('default', { month: 'long' })} ${year}`;
-      list.push({ id, labelBn, labelEn });
+  // Available Months for Salary Selection with strict 1st to last-day (30th/31st) cycles & 1st of next month payout date
+  const allOrderDates = React.useMemo(() => {
+    return orders.map((o) => o.updatedAt || o.createdAt || '').filter(Boolean);
+  }, [orders]);
+
+  const availableSalaryCycles = React.useMemo(() => {
+    return getAvailableSalaryCycles(allOrderDates, 12);
+  }, [allOrderDates]);
+
+  // Current selected salary cycle
+  const currentSelectedCycle = React.useMemo<SalaryMonthCycle>(() => {
+    const found = availableSalaryCycles.find((c) => c.id === selectedSalaryMonth);
+    if (found) return found;
+    if (selectedSalaryMonth && selectedSalaryMonth.includes('-')) {
+      const [y, m] = selectedSalaryMonth.split('-').map(Number);
+      if (!isNaN(y) && !isNaN(m)) {
+        return getSalaryMonthCycle(y, m - 1);
+      }
     }
-    return list;
-  }, []);
+    const now = new Date();
+    return getSalaryMonthCycle(now.getFullYear(), now.getMonth());
+  }, [availableSalaryCycles, selectedSalaryMonth]);
 
   // Compute Rider Monthly Delivery, Cancellation, and Salary Stats
+  // Strictly includes 1st 00:00:00 to last-day (30th/31st) 23:59:59. Next month 1st is excluded and belongs to the next month!
   const riderSalaryStats = React.useMemo(() => {
     return registeredRiders.map((rider) => {
       const riderOrders = orders.filter((o) => o.riderId === rider.id);
 
-      // Orders delivered in this selected month
+      // Orders delivered in this selected month cycle
       const deliveredOrders = riderOrders.filter((o) => {
         if (o.orderStatus !== 'delivered') return false;
-        const dStr = o.updatedAt || o.createdAt || '';
-        return dStr.startsWith(selectedSalaryMonth);
+        const dStr = o.updatedAt || o.createdAt;
+        return isTimestampInSalaryCycle(dStr, currentSelectedCycle);
       });
 
-      // Orders cancelled in this selected month
+      // Orders cancelled in this selected month cycle
       const cancelledOrders = riderOrders.filter((o) => {
         const isCancelled = o.orderStatus === 'cancelled' || o.isRiderCancelled;
         if (!isCancelled) return false;
-        const dStr = o.updatedAt || o.createdAt || '';
-        return dStr.startsWith(selectedSalaryMonth);
+        const dStr = o.updatedAt || o.createdAt;
+        return isTimestampInSalaryCycle(dStr, currentSelectedCycle);
       });
 
       const deliveredCount = deliveredOrders.length;
@@ -615,7 +624,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         paymentTx,
       };
     });
-  }, [registeredRiders, orders, selectedSalaryMonth, ratePerParcel, paymentTransactions]);
+  }, [registeredRiders, orders, currentSelectedCycle, selectedSalaryMonth, ratePerParcel, paymentTransactions]);
 
   // Filtered list based on search and status
   const filteredRiderSalaryStats = React.useMemo(() => {
@@ -637,17 +646,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const totalDelivered = riderSalaryStats.reduce((sum, r) => sum + r.deliveredCount, 0);
     const totalCancelled = riderSalaryStats.reduce((sum, r) => sum + r.cancelledCount, 0);
     const totalPayable = riderSalaryStats.reduce((sum, r) => sum + r.calculatedSalary, 0);
-    const totalPaid = riderSalaryStats
-      .filter((r) => r.isPaid)
-      .reduce((sum, r) => sum + (r.paymentTx?.amount || r.calculatedSalary), 0);
+    const paidRiders = riderSalaryStats.filter((r) => r.isPaid);
+    const totalPaid = paidRiders.reduce((sum, r) => sum + (r.paymentTx?.amount || r.calculatedSalary), 0);
     const pendingCount = riderSalaryStats.filter((r) => !r.isPaid && r.deliveredCount > 0).length;
+    const paidCount = paidRiders.length;
+    const totalUnpaid = Math.max(0, totalPayable - totalPaid);
 
     return {
       totalDelivered,
       totalCancelled,
       totalPayable,
       totalPaid,
+      totalUnpaid,
       pendingCount,
+      paidCount,
     };
   }, [riderSalaryStats]);
 
@@ -5171,18 +5183,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* Controls: Month Filter & Rate per parcel */}
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* Month Dropdown */}
+              {/* Month Dropdown with 1st to last-day range and payout date */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-2xl">
-                <Calendar className="w-4 h-4 text-slate-500" />
-                <span className="text-[11px] font-bold text-slate-600">মাস:</span>
+                <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span className="text-[11px] font-bold text-slate-600 shrink-0">মাস নির্বাচন:</span>
                 <select
                   value={selectedSalaryMonth}
                   onChange={(e) => setSelectedSalaryMonth(e.target.value)}
-                  className="bg-transparent font-bold text-xs text-slate-900 focus:outline-hidden cursor-pointer"
+                  className="bg-transparent font-bold text-xs text-slate-900 focus:outline-hidden cursor-pointer max-w-[280px] sm:max-w-none"
                 >
-                  {availableSalaryMonths.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.labelBn}
+                  {availableSalaryCycles.map((cycle) => (
+                    <option key={cycle.id} value={cycle.id}>
+                      {cycle.labelBn}
                     </option>
                   ))}
                 </select>
@@ -5201,6 +5213,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-14 bg-white border border-indigo-300 rounded-lg px-1.5 py-0.5 text-xs font-black text-indigo-950 text-right focus:outline-hidden"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Salary Cycle Date Range & Payout Rule Banner (১ তারিখ থেকে ৩০/৩১ তারিখ হিসাব ও ১ তারিখ সেলারি ডেট) */}
+          <div className="bg-gradient-to-r from-indigo-50/90 via-slate-50 to-emerald-50/90 border border-indigo-200/80 p-4 rounded-3xl shadow-xs space-y-2.5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-black text-slate-900 text-sm">
+                      {currentSelectedCycle.monthNameBn} {currentSelectedCycle.year} সেলারি চক্র
+                    </h3>
+                    <span className="bg-indigo-100 text-indigo-900 border border-indigo-200 text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                      ০১ থেকে {currentSelectedCycle.daysInMonth} তারিখ
+                    </span>
+                    <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      বেতন প্রদানের তারিখ: {currentSelectedCycle.payoutDateBn}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    📅 <strong>কাজের সময়সীমা:</strong> {currentSelectedCycle.dateRangeBn} (রাত ১১:৫৯:৫৯ পর্যন্ত) &nbsp;|&nbsp; 💰 <strong>সেলারির ডেট:</strong> <span className="text-emerald-800 font-black">{currentSelectedCycle.payoutDateBn}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start md:self-auto text-xs font-bold">
+                <span className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 shadow-2xs">
+                  {currentSelectedCycle.daysInMonth} দিনের মাস
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white/85 backdrop-blur-xs p-3 rounded-2xl border border-slate-200/80 text-[11px] text-slate-700 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>মাসের সেলারির নিয়ম:</strong> ১ তারিখ থেকে মাসের শেষ দিন ({currentSelectedCycle.daysInMonth} তারিখ) পর্যন্ত যা ডেলিভারি বা কাজ হয়েছে সব এই মাসের হিসেবে অন্তর্ভুক্ত। পরবর্তী মাসের ১ তারিখ থেকে সম্পন্ন কাজ স্বয়ংক্রিয়ভাবে পরের মাসের সেলারিতে দেখাবে।
+              </span>
             </div>
           </div>
 
@@ -5230,7 +5282,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {monthlySalaryTotals.totalDelivered} টি
               </span>
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                নির্বাচিত মাসে সফল ডেলিভারি
+                ০১ থেকে {currentSelectedCycle.daysInMonth} তারিখ
               </span>
             </div>
 
@@ -5263,18 +5315,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {formatBDT(monthlySalaryTotals.totalPaid)}
               </span>
               <span className="text-[10px] text-emerald-600 mt-0.5 block">
-                Trx ID সহ ইতিমধ্যে পরিশোধিত
+                {monthlySalaryTotals.paidCount} জন রাইডারকে ইতিমধ্যে পরিশোধিত
               </span>
             </div>
 
             {/* Card 5: Pending Payouts */}
             <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-2xs col-span-2 lg:col-span-1">
-              <span className="text-[11px] font-bold text-amber-900 block">বকেয়া রাইডার সংখ্যা</span>
+              <span className="text-[11px] font-bold text-amber-900 block">মোট বকেয়া বেতন</span>
               <span className="text-xl sm:text-2xl font-black text-amber-800 mt-1 block">
-                {monthlySalaryTotals.pendingCount} জন
+                {formatBDT(monthlySalaryTotals.totalUnpaid)}
               </span>
               <span className="text-[10px] text-amber-700 mt-0.5 block">
-                বেতন পরিশোধ অপেক্ষমান
+                {monthlySalaryTotals.pendingCount} জন রাইডারের বেতন বাকি
               </span>
             </div>
           </div>
@@ -5302,7 +5354,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                সকল ({riderSalaryStats.length})
+                সকল রাইডার ({riderSalaryStats.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSalaryStatusFilter('paid')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  salaryStatusFilter === 'paid'
+                    ? 'bg-emerald-700 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                <span>কাকে কত দেওয়া হয়েছে ({monthlySalaryTotals.paidCount})</span>
               </button>
               <button
                 type="button"
@@ -5313,21 +5377,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                বকেয়া ({riderSalaryStats.filter((r) => !r.isPaid).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSalaryStatusFilter('paid')}
-                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                  salaryStatusFilter === 'paid'
-                    ? 'bg-emerald-700 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                পরিশোধিত ({riderSalaryStats.filter((r) => r.isPaid).length})
+                বকেয়া তালিকা ({monthlySalaryTotals.pendingCount})
               </button>
             </div>
           </div>
+
+          {/* Dedicated Paid Salary Breakdown Summary Table when "paid" filter is active */}
+          {salaryStatusFilter === 'paid' && monthlySalaryTotals.paidCount > 0 && (
+            <div className="bg-white rounded-3xl border border-emerald-300 p-5 shadow-xs animate-in fade-in space-y-3">
+              <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                    <Banknote className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                      {currentSelectedCycle.monthNameBn} {currentSelectedCycle.year} – পরিশোধিত বেতনের বিস্তারিত হিসাব
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      মোট {monthlySalaryTotals.paidCount} জন রাইডারকে সর্বমোট {formatBDT(monthlySalaryTotals.totalPaid)} বেতন দেওয়া হয়েছে।
+                    </p>
+                  </div>
+                </div>
+                <span className="bg-emerald-700 text-white text-xs font-black px-3 py-1 rounded-full shadow-2xs">
+                  পরিশোধিত: {formatBDT(monthlySalaryTotals.totalPaid)}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-emerald-50/70 text-emerald-950 font-bold border-b border-emerald-100 text-[11px]">
+                      <th className="py-2.5 px-3">রাইডার</th>
+                      <th className="py-2.5 px-3">মোবাইল</th>
+                      <th className="py-2.5 px-3 text-center">ডেলিভারি</th>
+                      <th className="py-2.5 px-3 text-center">বাতিল</th>
+                      <th className="py-2.5 px-3">পরিশোধিত বেতন</th>
+                      <th className="py-2.5 px-3">মাধ্যম</th>
+                      <th className="py-2.5 px-3">Transaction ID (TrxID)</th>
+                      <th className="py-2.5 px-3">পরিশোধের সময়</th>
+                      <th className="py-2.5 px-3 text-right">রশিদ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {riderSalaryStats
+                      .filter((item) => item.isPaid)
+                      .map(({ rider, deliveredCount, cancelledCount, calculatedSalary, paymentTx }) => (
+                        <tr key={rider.id} className="hover:bg-emerald-50/30 transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-slate-900">{rider.name}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">{rider.phone}</td>
+                          <td className="py-2.5 px-3 text-center font-bold text-emerald-700">{deliveredCount} টি</td>
+                          <td className="py-2.5 px-3 text-center font-bold text-rose-600">{cancelledCount} টি</td>
+                          <td className="py-2.5 px-3 font-black text-emerald-800 font-mono">
+                            {formatBDT(paymentTx?.amount || calculatedSalary)}
+                          </td>
+                          <td className="py-2.5 px-3 uppercase font-semibold text-slate-700 text-[11px]">
+                            {paymentTx?.paymentMethod || 'bKash'}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-emerald-950">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                              {paymentTx?.transactionId || paymentTx?.id}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                            {paymentTx?.processedAt
+                              ? new Date(paymentTx.processedAt).toLocaleString('bn-BD', { dateStyle: 'short', timeStyle: 'short' })
+                              : '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            {paymentTx && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingSalaryReceipt(paymentTx)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[11px] transition-colors cursor-pointer"
+                              >
+                                রশিদ
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Riders Salary List Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -5476,7 +5610,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setSalaryAmountInput(calculatedSalary);
                             setSalaryTrxIdInput('');
                             setSalaryMethodInput('bkash');
-                            setSalaryNotesInput(`${availableSalaryMonths.find((m) => m.id === selectedSalaryMonth)?.labelBn || selectedSalaryMonth} মাসের ${deliveredCount} টি পার্সেল ডেলিভারি বেতন`);
+                            setSalaryNotesInput(`${currentSelectedCycle.shortLabelBn} (${currentSelectedCycle.dateRangeBn}) মাসের ${deliveredCount} টি পার্সেল ডেলিভারি বেতন`);
                           }}
                           className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
                         >
@@ -7143,7 +7277,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     রাইডার বেতন পরিশোধ ফরম
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    {availableSalaryMonths.find((m) => m.id === selectedSalaryMonth)?.labelBn || selectedSalaryMonth} মাসের পে-আউট
+                    {currentSelectedCycle.shortLabelBn} ({currentSelectedCycle.dateRangeBn}) • সেলারি ডেট: {currentSelectedCycle.payoutDateBn}
                   </p>
                 </div>
               </div>
