@@ -37,6 +37,9 @@ import {
   updateDepositRequestOnline,
   subscribeToTransactionsOnline,
   createTransactionOnline,
+  saveCustomerAddressOnline,
+  subscribeToPricingConfigOnline,
+  savePricingConfigOnline,
 } from './services/firestoreService';
 import {
   SEED_MARKETS,
@@ -57,7 +60,15 @@ import {
   OrderMessage,
   RiderDepositRequest,
   PaymentTransactionRecord,
+  DeliveryAddress,
+  DistanceTier,
+  DeliveryPricingConfig,
 } from './types';
+import {
+  DEFAULT_DELIVERY_PRICING_CONFIG,
+  calculateDeliveryChargeBreakdown,
+} from './lib/deliveryPricing';
+
 import { normalizePhone } from './lib/phone';
 import { Search, MapPin, ArrowRight, ArrowLeft, ShoppingBag, Sparkles, Flame, X } from 'lucide-react';
 
@@ -122,6 +133,15 @@ function MarketplaceMain() {
       if (saved) return JSON.parse(saved);
     } catch {}
     return null;
+  });
+
+  // Delivery Pricing Config (Distance & Weight Rates)
+  const [pricingConfig, setPricingConfig] = useState<DeliveryPricingConfig>(() => {
+    try {
+      const saved = localStorage.getItem('amar_delivery_pricing_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_DELIVERY_PRICING_CONFIG;
   });
 
   // Page Routing State (Full-page views: Catalog, ProductView, Cart, Orders, Login, Profile)
@@ -213,6 +233,15 @@ function MarketplaceMain() {
       }
     });
 
+    const unsubPricing = subscribeToPricingConfigOnline((liveConfig) => {
+      if (liveConfig && liveConfig.distanceRates) {
+        setPricingConfig(liveConfig);
+        try {
+          localStorage.setItem('amar_delivery_pricing_config', JSON.stringify(liveConfig));
+        } catch {}
+      }
+    });
+
     return () => {
       unsubOrders();
       unsubRiders();
@@ -220,6 +249,7 @@ function MarketplaceMain() {
       unsubMarkets();
       unsubDeposits();
       unsubTransactions();
+      unsubPricing();
     };
   }, []);
 
@@ -334,6 +364,117 @@ function MarketplaceMain() {
       console.warn('Firestore order write error:', e);
     }
   };
+
+  // Save Customer Delivery Address (Persist to Firestore, customer state & localStorage)
+  const handleSaveCustomerAddress = async (newAddress: DeliveryAddress) => {
+    if (!loggedInCustomer?.phone) return;
+    const existingAddresses = loggedInCustomer.savedAddresses || [];
+    const updatedAddresses = [newAddress, ...existingAddresses.filter((a) => a.id !== newAddress.id)];
+    const updatedCustomer: CustomerAccount = {
+      ...loggedInCustomer,
+      savedAddresses: updatedAddresses,
+      address: newAddress.fullAddress,
+      areaId: newAddress.thanaId,
+      unionId: newAddress.unionId,
+      unionName: newAddress.unionNameBn,
+    };
+    setLoggedInCustomer(updatedCustomer);
+    try {
+      localStorage.setItem('amar_active_customer', JSON.stringify(updatedCustomer));
+    } catch {}
+    try {
+      await saveCustomerAddressOnline(loggedInCustomer.phone, newAddress);
+    } catch (err) {
+      console.warn('Error saving customer address to Firestore:', err);
+    }
+  };
+
+  // Admin Updates Delivery Pricing Configuration (Distance Rates & Weight Rates)
+  const handleUpdatePricingConfig = async (newConfig: DeliveryPricingConfig) => {
+    setPricingConfig(newConfig);
+    try {
+      localStorage.setItem('amar_delivery_pricing_config', JSON.stringify(newConfig));
+    } catch {}
+    try {
+      await savePricingConfigOnline(newConfig);
+    } catch (err) {
+      console.warn('Error saving pricing config to Firestore:', err);
+    }
+  };
+
+  // Distance Verification / Adjustment (Admin & Rider)
+  // Ensures customer cannot pick a shorter distance tier to pay less
+  const handleAdjustOrderDistance = async (
+    orderId: string,
+    newDistanceTier: DistanceTier,
+    adjustmentNote: string,
+    actor: 'admin' | 'rider' = 'admin'
+  ) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    if (!targetOrder) return;
+
+    const currentWeight = targetOrder.totalWeightKg || 0;
+    const breakdown = calculateDeliveryChargeBreakdown(newDistanceTier, currentWeight, pricingConfig);
+    const nowStr = new Date().toISOString();
+
+    const newTotalDeliveryFee = breakdown.totalDeliveryCharge;
+    const newGrandTotal = targetOrder.subtotal + newTotalDeliveryFee;
+
+    const approxKm =
+      newDistanceTier === '0-1'
+        ? 0.8
+        : newDistanceTier === '1-2'
+        ? 1.5
+        : newDistanceTier === '2-3'
+        ? 2.5
+        : newDistanceTier === '3-4'
+        ? 3.5
+        : newDistanceTier === '4-5'
+        ? 4.5
+        : newDistanceTier === '5-6'
+        ? 5.5
+        : newDistanceTier === '6-8'
+        ? 7.0
+        : newDistanceTier === '8-10'
+        ? 9.0
+        : 12.0;
+
+    const updates: Partial<Order> = {
+      distanceTier: newDistanceTier,
+      estimatedDistanceKm: approxKm,
+      distanceCharge: breakdown.distanceCharge,
+      weightCharge: breakdown.weightCharge,
+      deliveryFee: newTotalDeliveryFee,
+      totalAmount: newGrandTotal,
+      distanceVerifiedBy: actor,
+      distanceAdjustmentNote: adjustmentNote,
+      originalDistanceTier: targetOrder.originalDistanceTier || (targetOrder.distanceTier as string),
+      originalTotalAmount: targetOrder.originalTotalAmount || targetOrder.totalAmount,
+      deliveryChargeSnapshot: {
+        distanceTier: newDistanceTier,
+        distanceCharge: breakdown.distanceCharge,
+        totalWeightKg: currentWeight,
+        weightCharge: breakdown.weightCharge,
+        specialHandlingFee: breakdown.specialHandlingFee,
+        totalDeliveryFee: newTotalDeliveryFee,
+        pickupPlaceName: targetOrder.pickupPlaceName,
+        fullAddress: targetOrder.deliveryAddress,
+        calculatedAt: nowStr,
+        verifiedBy: actor,
+        adjustedReason: adjustmentNote,
+      },
+      updatedAt: nowStr,
+    };
+
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o)));
+
+    try {
+      await updateOrderOnline(orderId, updates);
+    } catch (err) {
+      console.warn('Error syncing distance adjustment to Firestore:', err);
+    }
+  };
+
 
   const handleCancelOrder = async (orderId: string, reason: string) => {
     try {
@@ -1428,6 +1569,8 @@ function MarketplaceMain() {
                 unions={unions}
                 initialUnionId={selectedUnionId}
                 products={products}
+                pricingConfig={pricingConfig}
+                onSaveCustomerAddress={handleSaveCustomerAddress}
                 onRequireLogin={() => {
                   setCurrentPage('login');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1578,6 +1721,10 @@ function MarketplaceMain() {
             paymentTransactions={paymentTransactions}
             activeTab={riderTab}
             onSelectTab={setRiderTab}
+            pricingConfig={pricingConfig}
+            onAdjustOrderDistance={(orderId, tier, note) =>
+              handleAdjustOrderDistance(orderId, tier, note, 'rider')
+            }
             onAcceptOrder={handleRiderAcceptOrder}
             onCancelOrder={handleRiderCancelOrder}
             onSubmitDeposit={handleRiderSubmitDeposit}
@@ -1607,6 +1754,11 @@ function MarketplaceMain() {
             unions={unions}
             depositRequests={depositRequests}
             paymentTransactions={paymentTransactions}
+            pricingConfig={pricingConfig}
+            onUpdatePricingConfig={handleUpdatePricingConfig}
+            onAdjustOrderDistance={(orderId, tier, note) =>
+              handleAdjustOrderDistance(orderId, tier, note, 'admin')
+            }
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
             onToggleProductPrivate={handleToggleProductPrivate}

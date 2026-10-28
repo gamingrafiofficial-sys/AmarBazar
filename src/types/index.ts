@@ -37,6 +37,65 @@ export interface UnionArea {
   thanaNameBn: string;
 }
 
+export type DistanceTier =
+  | '0-1'
+  | '1-2'
+  | '2-3'
+  | '3-4'
+  | '4-5'
+  | '5-6'
+  | '6-8'
+  | '8-10'
+  | '10+';
+
+export interface DeliveryAddress {
+  id: string;
+  name: string;
+  phone: string;
+  thanaId: string;
+  thanaNameBn: string;
+  unionId: string;
+  unionNameBn: string;
+  pickupPlaceName: string; // যেমন Noapara, Chandpur Bazar
+  distanceTier: DistanceTier;
+  estimatedDistanceKm: number;
+  fullAddress: string; // বাড়ি, রাস্তা, গ্রাম ও পরিচিত স্থানের বিস্তারিত ঠিকানা
+  isDefault?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface DeliveryChargeSnapshot {
+  distanceTier: DistanceTier | string;
+  distanceCharge: number;
+  totalWeightKg: number;
+  weightCharge: number;
+  specialHandlingFee: number;
+  totalDeliveryFee: number;
+  pickupPlaceName?: string;
+  fullAddress?: string;
+  calculatedAt: string;
+  verifiedBy?: 'customer' | 'rider' | 'admin';
+  adjustedReason?: string;
+}
+
+export interface DeliveryPricingConfig {
+  distanceRates: Record<DistanceTier, number>;
+  weightRates: {
+    '0-1': number;
+    '1-2': number;
+    '2-4': number;
+    '4-6': number;
+    '6-8': number;
+    '8-15': number;
+    '15-25': number;
+    exact_25: number;
+    above_25: number;
+  };
+  specialHandlingFee: number;
+  updatedAt?: string;
+}
+
 export interface CustomerAccount {
   id: string;
   name: string;
@@ -46,6 +105,7 @@ export interface CustomerAccount {
   areaId: string;
   unionId?: string;
   unionName?: string;
+  savedAddresses?: DeliveryAddress[];
   createdAt: string;
 }
 
@@ -195,6 +255,19 @@ export interface Order {
   thanaNameBn?: string;
   unionId?: string;
   unionNameBn?: string;
+  pickupPlaceName?: string; // যেমন Noapara, Chandpur Bazar
+  distanceTier?: DistanceTier | string; // '0-1' | '1-2' | etc.
+  estimatedDistanceKm?: number;
+  actualDistanceKm?: number;
+  totalWeightKg?: number;
+  distanceCharge?: number;
+  weightCharge?: number;
+  specialHandlingFee?: number;
+  deliveryChargeSnapshot?: DeliveryChargeSnapshot;
+  distanceVerifiedBy?: 'customer' | 'rider' | 'admin';
+  distanceAdjustmentNote?: string;
+  originalDistanceTier?: string;
+  originalTotalAmount?: number;
   riderId?: string;
   riderName?: string;
   riderPhone?: string;

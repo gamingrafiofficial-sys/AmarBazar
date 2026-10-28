@@ -24,6 +24,8 @@ import {
   LedgerEntry,
   RiderDepositRequest,
   PaymentTransactionRecord,
+  DeliveryAddress,
+  DeliveryPricingConfig,
 } from '../types';
 import { normalizePhone } from '../lib/phone';
 import {
@@ -250,6 +252,66 @@ export async function fetchCustomerByPhoneOnline(phone: string): Promise<Custome
     console.warn('Error fetching customer from Firestore:', err);
   }
   return null;
+}
+
+export async function saveCustomerAddressOnline(phone: string, address: DeliveryAddress): Promise<void> {
+  const normPhone = normalizePhone(phone);
+  if (!normPhone) return;
+  try {
+    const docId = `cust-${normPhone}`;
+    const docRef = doc(db, CUSTOMERS_COL, docId);
+    const snap = await getDoc(docRef);
+    let updatedList = [address];
+    if (snap.exists()) {
+      const current = snap.data() as CustomerAccount;
+      const existingList = current.savedAddresses || [];
+      updatedList = [address, ...existingList.filter((a) => a.id !== address.id)];
+    }
+    await setDoc(
+      docRef,
+      {
+        savedAddresses: updatedList,
+        address: address.fullAddress,
+        areaId: address.thanaId,
+        unionId: address.unionId,
+        unionName: address.unionNameBn,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn('Error saving customer address to Firestore:', err);
+  }
+}
+
+export function subscribeToPricingConfigOnline(
+  onUpdate: (config: DeliveryPricingConfig) => void
+): Unsubscribe {
+  const docRef = doc(db, 'deliveryPricing', 'config');
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        onUpdate(snapshot.data() as DeliveryPricingConfig);
+      }
+    },
+    (err) => console.warn('Pricing config listener error:', err)
+  );
+}
+
+export async function savePricingConfigOnline(config: DeliveryPricingConfig): Promise<void> {
+  try {
+    await setDoc(
+      doc(db, 'deliveryPricing', 'config'),
+      {
+        ...config,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn('Error saving pricing config to Firestore:', err);
+  }
 }
 
 // ==========================================
@@ -583,4 +645,6 @@ export async function createTransactionOnline(record: PaymentTransactionRecord):
     handleFirestoreError(error, OperationType.CREATE, `${TRANSACTIONS_COL}/${record.id}`);
   }
 }
+
+
 

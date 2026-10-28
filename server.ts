@@ -585,6 +585,15 @@ app.post('/api/orders/create', async (req, res) => {
       thanaNameBn,
       unionId,
       unionNameBn,
+      pickupPlaceName,
+      distanceTier,
+      estimatedDistanceKm,
+      totalWeightKg,
+      distanceCharge,
+      weightCharge,
+      specialHandlingFee,
+      deliveryChargeSnapshot,
+      deliveryFee: clientDeliveryFee,
       items,
       customerName,
       customerPhone,
@@ -675,13 +684,12 @@ app.post('/api/orders/create', async (req, res) => {
     );
 
     const feeCalc = calculateDeliveryFee(route.roadDistanceKm, inMemoryDB.pricing);
-    if (!feeCalc.isWithinServiceRadius) {
-      return res.status(400).json({
-        error: `Delivery distance ${route.roadDistanceKm}km exceeds allowed limit of ${inMemoryDB.pricing.maxDeliveryDistanceKm}km.`,
-      });
-    }
 
-    const deliveryFee = feeCalc.fee;
+    // Use client-provided distance+weight calculated fee if provided, else fallback to standard
+    const deliveryFee =
+      clientDeliveryFee !== undefined && Number(clientDeliveryFee) >= 0
+        ? Number(clientDeliveryFee)
+        : feeCalc.fee;
     const totalAmount = authoritativeSubtotal + deliveryFee;
 
     // 4. Decrement Stock
@@ -711,6 +719,16 @@ app.post('/api/orders/create', async (req, res) => {
       thanaNameBn: determinedThanaName,
       unionId: unionId || '',
       unionNameBn: unionNameBn || '',
+      pickupPlaceName: pickupPlaceName || '',
+      distanceTier: distanceTier || '1-2',
+      estimatedDistanceKm: Number(estimatedDistanceKm) || route.roadDistanceKm,
+      actualDistanceKm: route.roadDistanceKm,
+      totalWeightKg: Number(totalWeightKg) || 0,
+      distanceCharge: Number(distanceCharge) || 0,
+      weightCharge: Number(weightCharge) || 0,
+      specialHandlingFee: Number(specialHandlingFee) || 0,
+      deliveryChargeSnapshot: deliveryChargeSnapshot || undefined,
+      distanceVerifiedBy: 'customer',
       items: validatedItems,
       subtotal: authoritativeSubtotal,
       deliveryFee,

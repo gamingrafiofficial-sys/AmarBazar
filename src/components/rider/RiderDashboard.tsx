@@ -6,6 +6,8 @@ import {
   RiderDepositRequest,
   PaymentTransactionRecord,
   OutletHub,
+  DistanceTier,
+  DeliveryPricingConfig,
 } from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
@@ -14,6 +16,11 @@ import { OrderNoteSection } from '../common/OrderNoteSection';
 import { getNavigationUrl } from '../../lib/maps';
 import { calculateOrderFinancialSplit } from '../../lib/financialLedger';
 import { SEED_UNIONS, SEED_OUTLETS } from '../../data/seedData';
+import {
+  DISTANCE_TIER_OPTIONS,
+  calculateDeliveryChargeBreakdown,
+  DEFAULT_DELIVERY_PRICING_CONFIG,
+} from '../../lib/deliveryPricing';
 import {
   Bike,
   MapPin,
@@ -44,6 +51,8 @@ import {
   Store,
   Home,
   Package,
+  Scale,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface RiderDashboardProps {
@@ -54,6 +63,12 @@ interface RiderDashboardProps {
   activeTab?: 'overview' | 'orders' | 'outlets' | 'profile';
   onSelectTab?: (tab: 'overview' | 'orders' | 'outlets' | 'profile') => void;
   outlets?: OutletHub[];
+  pricingConfig?: DeliveryPricingConfig;
+  onAdjustOrderDistance?: (
+    orderId: string,
+    newDistanceTier: DistanceTier,
+    adjustmentNote: string
+  ) => Promise<void> | void;
   onAcceptOrder: (orderId: string, rider: DeliveryRiderAccount) => Promise<void>;
   onCancelOrder?: (orderId: string, reason: string) => Promise<void> | void;
   onSubmitDeposit?: (amount: number, notes?: string) => Promise<void> | void;
@@ -73,6 +88,8 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   activeTab: controlledActiveTab,
   onSelectTab,
   outlets = SEED_OUTLETS,
+  pricingConfig = DEFAULT_DELIVERY_PRICING_CONFIG,
+  onAdjustOrderDistance,
   onAcceptOrder,
   onCancelOrder,
   onSubmitDeposit,
@@ -115,6 +132,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
   const [handoverNotes, setHandoverNotes] = useState<string>('অফিসে ক্যাশ টাকা জমা দিয়েছি');
   const [depositSuccessMsg, setDepositSuccessMsg] = useState<string>('');
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
+
+  // Distance Adjustment / Verification Modal State (কাস্টমার যেন কম দূরত্ব দিয়ে কম টাকা না দিতে পারে)
+  const [adjustingOrder, setAdjustingOrder] = useState<Order | null>(null);
+  const [adjustDistanceTier, setAdjustDistanceTier] = useState<DistanceTier>('1-2');
+  const [adjustNote, setAdjustNote] = useState<string>('কাস্টমারের বাড়ির প্রকৃত দূরত্ব যাচাই করে সংশোধন করা হলো');
+  const [adjustSuccessMsg, setAdjustSuccessMsg] = useState<string>('');
 
   // Tab State: 'overview' (Home), 'orders' (Orders), 'outlets' (Area), 'profile' (Profile)
   const [internalTab, setInternalTab] = useState<'overview' | 'orders' | 'outlets' | 'profile'>('overview');
@@ -323,6 +346,20 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     setIsProcessing(false);
     setCancelOrderId(null);
     setCancelCustomReason('');
+  };
+
+  // Confirm rider adjusting/verifying customer delivery distance
+  const handleAdjustDistanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingOrder) return;
+    setIsProcessing(true);
+    if (onAdjustOrderDistance) {
+      await onAdjustOrderDistance(adjustingOrder.id, adjustDistanceTier, adjustNote);
+    }
+    setAdjustSuccessMsg(`অর্ডার #${adjustingOrder.id}-এর দূরত্ব সফলভাবে '${adjustDistanceTier}' কিমি হিসেবে সংশোধিত হয়েছে।`);
+    setTimeout(() => setAdjustSuccessMsg(''), 6000);
+    setIsProcessing(false);
+    setAdjustingOrder(null);
   };
 
   const handleHandoverSubmit = async (e: React.FormEvent) => {
@@ -853,6 +890,12 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                     </div>
 
                     <div className="space-y-1.5 text-xs text-slate-600 mb-3">
+                      {order.pickupPlaceName && (
+                        <p className="flex items-center gap-1.5 text-slate-900 font-bold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                          <Store className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>পিকআপ শপ/পয়েন্ট: <span className="text-amber-900">{order.pickupPlaceName}</span></span>
+                        </p>
+                      )}
                       <p className="flex items-start gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                         <span>গন্তব্য: <strong className="text-slate-800">{order.deliveryAddress}</strong></span>
@@ -860,12 +903,24 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                       <p className="text-[11px] text-slate-500">
                         গ্রাহক: {order.customerName} ({order.customerPhone})
                       </p>
-                      <p className="text-[11px] text-slate-500">
-                        পণ্য সংখ্যা: {order.items.length} আইটেম ({formatBDT(order.subtotal)})
-                      </p>
-                      <p className="text-[11px] text-emerald-700 font-semibold">
-                        সড়ক দূরত্ব: {order.roadDistanceKm} কি.মি
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                        <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Package className="w-3 h-3 text-slate-600" />
+                          {order.items.length} আইটেম ({formatBDT(order.subtotal)})
+                        </span>
+                        {order.totalWeightKg !== undefined && order.totalWeightKg > 0 && (
+                          <span className="bg-purple-50 text-purple-800 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 border border-purple-200">
+                            <Scale className="w-3 h-3 text-purple-600" />
+                            ওজন: {order.totalWeightKg} কেজি
+                          </span>
+                        )}
+                        {order.distanceTier && (
+                          <span className="bg-blue-50 text-blue-800 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 border border-blue-200">
+                            <Navigation className="w-3 h-3 text-blue-600" />
+                            দূরত্ব: {order.distanceTier} কিমি
+                          </span>
+                        )}
+                      </div>
                       {order.notes && (
                         <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-950 mt-1">
                           <strong>📝 কাস্টমার নোট:</strong> {order.notes}
@@ -940,11 +995,57 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4 text-xs">
-                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                       <span className="font-bold text-slate-700 block">ডেলিভারি ঠিকানা ও ফোন:</span>
+                      {order.pickupPlaceName && (
+                        <div className="bg-amber-50 text-amber-900 px-2.5 py-1 rounded-xl text-xs font-bold border border-amber-200 flex items-center gap-1.5">
+                          <Store className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>পিকআপ পয়েন্ট: {order.pickupPlaceName}</span>
+                        </div>
+                      )}
                       <p className="font-semibold text-slate-900">{order.customerName}</p>
-                      <p className="text-slate-600">{order.deliveryAddress}</p>
-                      <div className="pt-1 flex items-center gap-2">
+                      <p className="text-slate-600 leading-relaxed">{order.deliveryAddress}</p>
+                      
+                      {/* Distance & Weight Info */}
+                      <div className="p-2.5 bg-white rounded-xl border border-slate-200 space-y-1 text-[11px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <Navigation className="w-3 h-3 text-blue-600" />
+                            <span>দূরত্ব স্ল্যাব:</span>
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            {order.distanceTier ? `${order.distanceTier} কিমি` : '১-২ কিমি'} 
+                            {order.distanceCharge ? ` (৳${order.distanceCharge})` : ''}
+                          </span>
+                        </div>
+                        {order.totalWeightKg !== undefined && order.totalWeightKg > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 flex items-center gap-1">
+                              <Scale className="w-3 h-3 text-purple-600" />
+                              <span>মোট পণ্যের ওজন:</span>
+                            </span>
+                            <span className="font-bold text-purple-900">
+                              {order.totalWeightKg} কেজি {order.weightCharge ? ` (+৳${order.weightCharge})` : ''}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                          <span className="font-bold text-slate-700">মোট ডেলিভারি চার্জ:</span>
+                          <span className="font-extrabold text-emerald-800">৳{order.deliveryFee}</span>
+                        </div>
+
+                        {order.distanceVerifiedBy && (
+                          <div className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1 mt-1">
+                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                            <span>দূরত্ব যাচাইকৃত ({order.distanceVerifiedBy === 'admin' ? 'এডমিন' : 'রাইডার'})</span>
+                            {order.distanceAdjustmentNote && (
+                              <span className="text-slate-500 font-normal"> - {order.distanceAdjustmentNote}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-1 flex flex-wrap items-center gap-2">
                         <a
                           href={`tel:${order.customerPhone}`}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1"
@@ -961,18 +1062,48 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
                           <Navigation className="w-3.5 h-3.5" />
                           <span>গুগল ম্যাপে পথ দেখুন</span>
                         </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustingOrder(order);
+                            setAdjustDistanceTier((order.distanceTier as DistanceTier) || '1-2');
+                            setAdjustNote('কাস্টমারের বাড়ির প্রকৃত দূরত্ব যাচাই করে সংশোধন করা হলো');
+                          }}
+                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="কাস্টমার ভুল বা কম দূরত্ব নির্বাচন করলে এখান থেকে সংশোধন করুন"
+                        >
+                          <SlidersHorizontal className="w-3 h-3 text-indigo-600" />
+                          <span>দূরত্ব যাচাই / সংশোধন</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
-                      <span className="font-bold text-slate-700 block">পণ্য তালিকা:</span>
-                      <div className="space-y-1 max-h-24 overflow-y-auto">
-                        {order.items.map((it) => (
-                          <div key={it.productId} className="flex justify-between text-slate-600">
-                            <span>{it.nameBn} x {it.quantity} {it.unit}</span>
-                            <span className="font-semibold">{formatBDT(it.lineTotal)}</span>
-                          </div>
-                        ))}
+                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 flex flex-col justify-between">
+                      <div>
+                        <span className="font-bold text-slate-700 block mb-1">পণ্য তালিকা ও হিসাব:</span>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {order.items.map((it) => (
+                            <div key={it.productId} className="flex justify-between text-slate-600">
+                              <span>{it.nameBn} x {it.quantity} {it.unit}</span>
+                              <span className="font-semibold">{formatBDT(it.lineTotal)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200 text-[11px] space-y-1">
+                        <div className="flex justify-between text-slate-500">
+                          <span>পণ্য সাবটোটাল:</span>
+                          <span className="font-semibold">{formatBDT(order.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-500">
+                          <span>ডেলিভারি ফি:</span>
+                          <span className="font-semibold">{formatBDT(order.deliveryFee)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-slate-900 text-xs pt-1 border-t border-slate-200">
+                          <span>সর্বমোট ক্যাশ আদায়:</span>
+                          <span className="text-emerald-800 font-extrabold">{formatBDT(order.totalAmount)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1634,19 +1765,146 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
         </div>
       )}
 
-      {/* Real-time Order Chat Modal for Rider */}
-      {activeChatOrder && (
-        <OrderChatModal
-          order={allOrders.find((o) => o.id === activeChatOrder.id) || activeChatOrder}
-          currentUserRole="rider"
-          currentUserName={rider.name}
-          currentUserPhone={rider.phone}
-          isOpen={true}
-          onClose={() => setActiveChatOrder(null)}
-          onSendMessage={async (oId, text) => {
-            if (onSendMessage) await onSendMessage(oId, text);
-          }}
-        />
+      {/* Distance Verification & Adjustment Modal for Rider */}
+      {adjustingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-indigo-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center shrink-0">
+                  <SlidersHorizontal className="w-5 h-5 text-indigo-700" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    কাস্টমার দূরত্ব যাচাই ও সংশোধন
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    অর্ডার #{adjustingOrder.id} • {adjustingOrder.customerName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdjustingOrder(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAdjustDistanceSubmit} className="space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                <p className="text-[11px] text-slate-500">
+                  <strong>ডেলিভারি ঠিকানা:</strong> {adjustingOrder.deliveryAddress}
+                </p>
+                {adjustingOrder.pickupPlaceName && (
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    <strong>পিকআপ শপ/পয়েন্ট:</strong> {adjustingOrder.pickupPlaceName}
+                  </p>
+                )}
+                <p className="text-[11px] text-slate-600">
+                  <strong>কাস্টমারের দেওয়া আনুমানিক দূরত্ব:</strong>{' '}
+                  <span className="font-bold text-slate-800 bg-slate-200 px-1.5 py-0.5 rounded">
+                    {adjustingOrder.distanceTier || '১-২'} কিমি
+                  </span>
+                </p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-800 block mb-1.5">
+                  সঠিক প্রকৃত দূরত্ব নির্বাচন করুন <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={adjustDistanceTier}
+                  onChange={(e) => setAdjustDistanceTier(e.target.value as DistanceTier)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  {DISTANCE_TIER_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.labelBn} (চার্জ: ৳{pricingConfig.distanceRates[opt.id] || 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Dynamic live calculation preview */}
+              {(() => {
+                const preview = calculateDeliveryChargeBreakdown(
+                  adjustDistanceTier,
+                  adjustingOrder.totalWeightKg || 0,
+                  pricingConfig
+                );
+                const prevFee = adjustingOrder.deliveryFee;
+                const newFee = preview.totalDeliveryCharge;
+                const diff = newFee - prevFee;
+                const newGrandTotal = adjustingOrder.subtotal + newFee;
+
+                return (
+                  <div className="p-3.5 bg-indigo-50/70 rounded-2xl border border-indigo-200 text-[11px] space-y-1.5">
+                    <span className="font-bold text-indigo-950 block">সংশোধিত ডেলিভারি চার্জ হিসাব:</span>
+                    <div className="flex justify-between text-slate-600">
+                      <span>দূরত্ব চার্জ ({preview.distanceTierLabelBn}):</span>
+                      <span className="font-bold">৳{preview.distanceCharge}</span>
+                    </div>
+                    {preview.weightCharge > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>ওজন অতিরিক্ত চার্জ ({preview.weightTierLabelBn}):</span>
+                        <span className="font-bold">+৳{preview.weightCharge}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-indigo-900 pt-1 border-t border-indigo-200">
+                      <span>নতুন মোট ডেলিভারি ফি:</span>
+                      <span className="text-sm">৳{newFee}</span>
+                    </div>
+                    {diff !== 0 && (
+                      <div className="text-[10px] text-slate-500 flex justify-between">
+                        <span>আগের চার্জ থেকে পরিবর্তন:</span>
+                        <span className={diff > 0 ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
+                          {diff > 0 ? `+৳${diff} বৃদ্ধি পাবে` : `-৳${Math.abs(diff)} কমবে`}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-black text-slate-900 text-xs pt-1.5 border-t border-indigo-200">
+                      <span>গ্রাহক থেকে নতুন ক্যাশ আদায়:</span>
+                      <span className="text-emerald-800 text-sm font-black">{formatBDT(newGrandTotal)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  সংশোধনের কারণ / রাইডার নোট <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={adjustNote}
+                  onChange={(e) => setAdjustNote(e.target.value)}
+                  placeholder="যেমন: কাস্টমারের বাড়ি ৩-৪ কিমি দূরে, ভুল দূরত্ব দেওয়া হয়েছিল"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {isProcessing ? 'আপডেট হচ্ছে...' : 'দূরত্ব আপডেট ও ক্যাশ সংশোধন করুন'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdjustingOrder(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

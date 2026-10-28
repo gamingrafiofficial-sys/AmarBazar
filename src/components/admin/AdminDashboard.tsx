@@ -9,6 +9,8 @@ import {
   UnionArea,
   RiderDepositRequest,
   PaymentTransactionRecord,
+  DistanceTier,
+  DeliveryPricingConfig,
 } from '../../types';
 import { useLanguage } from '../../hooks/useLanguage';
 import { StatusBadge } from '../common/StatusBadge';
@@ -16,6 +18,11 @@ import { OrderChatModal } from '../common/OrderChatModal';
 import { OrderNoteSection } from '../common/OrderNoteSection';
 import { SEED_UNIONS } from '../../data/seedData';
 import { normalizePhone } from '../../lib/phone';
+import {
+  DISTANCE_TIER_OPTIONS,
+  calculateDeliveryChargeBreakdown,
+  DEFAULT_DELIVERY_PRICING_CONFIG,
+} from '../../lib/deliveryPricing';
 import {
   ShieldAlert,
   Package,
@@ -66,6 +73,9 @@ import {
   UserCheck,
   ShieldCheck,
   Store,
+  Scale,
+  SlidersHorizontal,
+  Navigation,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -77,6 +87,13 @@ interface AdminDashboardProps {
   unions?: UnionArea[];
   depositRequests?: RiderDepositRequest[];
   paymentTransactions?: PaymentTransactionRecord[];
+  pricingConfig?: DeliveryPricingConfig;
+  onUpdatePricingConfig?: (config: DeliveryPricingConfig) => void;
+  onAdjustOrderDistance?: (
+    orderId: string,
+    newDistanceTier: DistanceTier,
+    adjustmentNote: string
+  ) => Promise<void> | void;
   onAddProduct: (prod: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateProduct?: (prodId: string, updates: Partial<Product>) => void;
   onToggleProductPrivate?: (prodId: string, isPrivate: boolean) => void;
@@ -105,6 +122,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   unions = SEED_UNIONS,
   depositRequests = [],
   paymentTransactions = [],
+  pricingConfig = DEFAULT_DELIVERY_PRICING_CONFIG,
+  onUpdatePricingConfig,
+  onAdjustOrderDistance,
   onAddProduct,
   onUpdateProduct,
   onToggleProductPrivate,
@@ -161,7 +181,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     | 'deposit_requests'
     | 'transactions'
     | 'outlet'
+    | 'pricing_rates'
   >('summary');
+
+  // Pricing & Weight Rates State
+  const [ratesConfig, setRatesConfig] = useState<DeliveryPricingConfig>(() => pricingConfig || DEFAULT_DELIVERY_PRICING_CONFIG);
+  const [ratesSuccessMsg, setRatesSuccessMsg] = useState<string>('');
+
+  // Admin Order Distance Adjustment Modal State
+  const [adminAdjustingOrder, setAdminAdjustingOrder] = useState<Order | null>(null);
+  const [adminAdjustTier, setAdminAdjustTier] = useState<DistanceTier>('1-2');
+  const [adminAdjustNote, setAdminAdjustNote] = useState<string>('এডমিন দ্বারা দূরত্ব ভেরিফাই ও সংশোধন করা হলো');
+  const [adminAdjustSuccessMsg, setAdminAdjustSuccessMsg] = useState<string>('');
+
+  // Keep ratesConfig in sync when pricingConfig prop updates
+  React.useEffect(() => {
+    if (pricingConfig) {
+      setRatesConfig(pricingConfig);
+    }
+  }, [pricingConfig]);
+
 
   // Outlet Management State
   const [outlets, setOutlets] = useState([
@@ -1473,6 +1512,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             Outlet
           </span>
         </button>
+
+        {/* Box 13: Delivery Pricing & Weight Rates */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('pricing_rates')}
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
+            activeTab === 'pricing_rates'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
+          }`}
+        >
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'pricing_rates'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-indigo-50 text-indigo-700'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'ডেলিভারি চার্জ ও ওজন রেট' : 'Pricing Rates'}
+          </span>
+        </button>
       </div>
 
       {/* TAB 0: SUMMARY OVERVIEW (সামারি ও পারফরম্যান্স ওভারভিউ) */}
@@ -2624,6 +2687,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <p>
                           <strong className="text-slate-800">ডেলিভারি ঠিকানা:</strong> {order.deliveryAddress}
                         </p>
+                        {order.pickupPlaceName && (
+                          <p className="flex items-center gap-1.5 text-slate-700">
+                            <strong className="text-slate-800">পিকআপ পয়েন্ট:</strong>
+                            <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md font-semibold border border-amber-200">
+                              📍 {order.pickupPlaceName}
+                            </span>
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-1.5 py-1 text-[11px]">
+                          <span className="bg-blue-50 text-blue-900 border border-blue-200 px-2 py-0.5 rounded-lg font-bold">
+                            🛣️ {DISTANCE_TIER_OPTIONS.find((t) => t.id === order.distanceTier)?.labelBn || order.distanceTier || '১–২ কিমি'}
+                          </span>
+                          <span className="bg-emerald-50 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded-lg font-bold">
+                            ⚖️ মোট ওজন: {((order.totalWeightKg ?? 1.0)).toFixed(1)} কেজি
+                          </span>
+                          <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-lg font-bold">
+                            ডেলিভারি চার্জ: {formatBDT(order.deliveryFee)}
+                            {order.distanceCharge !== undefined && (
+                              <span className="text-[10px] text-slate-500 font-normal ml-1">
+                                (দূরত্ব {formatBDT(order.distanceCharge)} + ওজন {formatBDT(order.weightCharge || 0)})
+                              </span>
+                            )}
+                          </span>
+                          {order.distanceVerifiedBy && (
+                            <span className="bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                              ✓ যাচাইকৃত ({order.distanceVerifiedBy === 'admin' ? 'এডমিন' : 'রাইডার'})
+                            </span>
+                          )}
+                        </div>
                         <p>
                           <strong className="text-slate-800">আইটেম:</strong>{' '}
                           {order.items.map((i) => `${i.nameBn} (${i.quantity} ${i.unit})`).join(', ')}
@@ -2645,6 +2737,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdminAdjustingOrder(order);
+                          setAdminAdjustTier((order.distanceTier as DistanceTier) || '1-2');
+                          setAdminAdjustNote(order.distanceAdjustmentNote || 'এডমিন দ্বারা সঠিক দূরত্ব নির্ধারণ ও যাচাই করা হয়েছে');
+                        }}
+                        className="px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-2xs cursor-pointer"
+                        title="দূরত্ব ও ডেলিভারি চার্জ যাচাই বা সংশোধন করুন"
+                      >
+                        <Navigation className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>দূরত্ব সংশোধন</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => setActiveChatOrder(order)}
@@ -2829,7 +2935,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {o.thanaNameBn ? `${o.thanaNameBn} • ` : ''}{o.unionNameBn}
                           </span>
                         )}
+                        {o.pickupPlaceName && (
+                          <span className="inline-block bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold px-1.5 py-0.2 rounded-md mb-0.5 mr-1">
+                            📍 {o.pickupPlaceName}
+                          </span>
+                        )}
                         <p className="truncate text-[11px] text-slate-500">{o.deliveryAddress}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                          <span>🛣️ {DISTANCE_TIER_OPTIONS.find((t) => t.id === o.distanceTier)?.labelBn || o.distanceTier || '১–২ কিমি'}</span>
+                          <span>•</span>
+                          <span>⚖️ {(o.totalWeightKg ?? 1.0).toFixed(1)} কেজি</span>
+                          <span>•</span>
+                          <span className="font-bold text-slate-700">চার্জ: {formatBDT(o.deliveryFee)}</span>
+                        </div>
                       </td>
                       <td className="py-2.5 px-3">
                         <StatusBadge status={o.orderStatus} size="sm" />
@@ -2859,6 +2977,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </span>
                             )}
                           </button>
+                          {o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminAdjustingOrder(o);
+                                setAdminAdjustTier((o.distanceTier as DistanceTier) || '1-2');
+                                setAdminAdjustNote(o.distanceAdjustmentNote || 'এডমিন দ্বারা সঠিক দূরত্ব নির্ধারণ ও যাচাই করা হয়েছে');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-[10px] transition-colors cursor-pointer"
+                              title="দূরত্ব ও চার্জ যাচাই বা সংশোধন করুন"
+                            >
+                              <Navigation className="w-2.5 h-2.5 text-indigo-700" />
+                              <span>দূরত্ব সংশোধন</span>
+                            </button>
+                          )}
                           {o.notes ? (
                             <span
                               className="text-[10px] text-amber-900 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded truncate max-w-[130px]"
@@ -4607,6 +4740,215 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* TAB: PRICING & WEIGHT RATES (দূরত্ব ও ওজন ভিত্তিক চার্জ সেটিংস) */}
+      {activeTab === 'pricing_rates' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-indigo-100 text-indigo-800">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  {language === 'bn'
+                    ? 'ডেলিভারি চার্জ ও ওজন রেট সেটিংস'
+                    : 'Distance & Weight Delivery Rates'}
+                </h2>
+                <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  সক্রিয় রেট তালিকা
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'দোকান থেকে কাস্টমারের দূরত্ব এবং অর্ডারের মোট ওজনের ভিত্তিতে চার্জ স্বয়ংক্রিয়ভাবে যোগ হবে।'
+                  : 'Automated delivery charge calculation based on pickup distance tier and cart weight.'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRatesConfig(DEFAULT_DELIVERY_PRICING_CONFIG);
+                  if (onUpdatePricingConfig) onUpdatePricingConfig(DEFAULT_DELIVERY_PRICING_CONFIG);
+                  setRatesSuccessMsg('ডিফল্ট রেট সফলভাবে পুনরুদ্ধার করা হয়েছে।');
+                  setTimeout(() => setRatesSuccessMsg(''), 4000);
+                }}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 px-3.5 rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                ডিফল্ট রেট রিসেট
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onUpdatePricingConfig) onUpdatePricingConfig(ratesConfig);
+                  setRatesSuccessMsg('ডেলিভারি চার্জ ও ওজন রেট সফলভাবে সংরক্ষণ করা হয়েছে!');
+                  setTimeout(() => setRatesSuccessMsg(''), 4000);
+                }}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-4 rounded-xl text-xs flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>পরিবর্তন সংরক্ষণ করুন</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Success Notice */}
+          {ratesSuccessMsg && (
+            <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-950 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <CheckCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>{ratesSuccessMsg}</span>
+            </div>
+          )}
+
+          {/* Grid: Distance Rates & Weight Rates */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* CARD 1: DISTANCE-BASED DELIVERY RATES */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-bold">
+                    <Navigation className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      ১. দূরত্ব অনুযায়ী সাধারণ ডেলিভারি চার্জ
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      দোকান থেকে কাস্টমারের বাড়ির আনুমানিক দূরত্ব
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-blue-50 text-blue-800 font-bold px-2 py-0.5 rounded-md border border-blue-200">
+                  ৯টি স্ল্যাব
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {DISTANCE_TIER_OPTIONS.map((tier) => (
+                  <div
+                    key={tier.id}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200/80 hover:bg-white transition-colors"
+                  >
+                    <div>
+                      <span className="font-bold text-slate-900 text-xs block">
+                        {tier.labelBn} ({tier.labelEn})
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        আনুমানিক সড়ক দূরত্ব ~{tier.approxKm} কিমি
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-slate-500 text-xs">৳</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={ratesConfig.distanceRates[tier.id] ?? 0}
+                        onChange={(e) => {
+                          const val = Number(e.target.value) || 0;
+                          setRatesConfig((prev) => ({
+                            ...prev,
+                            distanceRates: {
+                              ...prev.distanceRates,
+                              [tier.id]: val,
+                            },
+                          }));
+                        }}
+                        className="w-20 p-2 rounded-xl border border-slate-300 font-black text-slate-900 text-xs text-right bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* CARD 2: WEIGHT-BASED ADDITIONAL RATES */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold">
+                    <Scale className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      ২. পণ্যের মোট ওজন অনুযায়ী অতিরিক্ত চার্জ
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      ভারী পণ্য ও গ্যাস সিলিন্ডার বহনের অতিরিক্ত ফি
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-purple-50 text-purple-800 font-bold px-2 py-0.5 rounded-md border border-purple-200">
+                  ওজন স্ল্যাব
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {[
+                  { key: '0-1', label: '০–১ কেজি', note: 'নিত্য প্রয়োজনীয় হালকা পণ্য (৳০)' },
+                  { key: '1-2', label: '১–২ কেজি', note: '১ থেকে ২ কেজি পর্যন্ত (+৳১০)' },
+                  { key: '2-4', label: '২–৪ কেজি', note: '২ থেকে ৪ কেজি পর্যন্ত (+৳২০)' },
+                  { key: '4-6', label: '৪–৬ কেজি', note: '৪ থেকে ৬ কেজি পর্যন্ত (+৳৩০)' },
+                  { key: '6-8', label: '৬–৮ কেজি', note: '৬ থেকে ৮ কেজি পর্যন্ত (+৳৩৫)' },
+                  { key: '8-15', label: '৮–১৫ কেজি', note: '৮ থেকে ১৫ কেজি (যেমন ১২ কেজি সিলিন্ডার)' },
+                  { key: '15-25', label: '১৫–২৫ কেজি', note: '১৫ থেকে ২৫ কেজির কম পণ্য' },
+                  { key: 'exact_25', label: 'ঠিক ২৫ কেজি (বস্তা)', note: 'স্পেশাল রেট: ঠিক ২৫ কেজি বস্তা' },
+                  { key: 'above_25', label: '২৫ কেজির বেশি', note: 'ভারী বস্তা বা বড় সিলিন্ডার (বিশেষ ডেলিভারি)' },
+                ].map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200/80 hover:bg-white transition-colors"
+                  >
+                    <div>
+                      <span className="font-bold text-slate-900 text-xs block">
+                        {item.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {item.note}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-slate-500 text-xs">+৳</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={(ratesConfig.weightRates as any)[item.key] ?? 0}
+                        onChange={(e) => {
+                          const val = Number(e.target.value) || 0;
+                          setRatesConfig((prev) => ({
+                            ...prev,
+                            weightRates: {
+                              ...prev.weightRates,
+                              [item.key]: val,
+                            },
+                          }));
+                        }}
+                        className="w-20 p-2 rounded-xl border border-slate-300 font-black text-slate-900 text-xs text-right bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500/20"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Formula Explanation Banner */}
+          <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-amber-950 text-xs space-y-1">
+            <span className="font-bold flex items-center gap-1 text-amber-900">
+              <AlertCircle className="w-4 h-4" />
+              <span>ডেলিভারি চার্জ ফর্মুলা ও হিসাব নিয়ম:</span>
+            </span>
+            <p className="leading-relaxed text-[11px] text-amber-900/90">
+              সর্বমোট ডেলিভারি চার্জ = দূরত্ব চার্জ + ওজন অতিরিক্ত চার্জ + স্পেশাল হ্যান্ডলিং ফি।
+              কাস্টমার অর্ডার দেওয়ার সময় আনুমানিক দূরত্ব নির্বাচন করবে। রাইডার বা এডমিন ডেলিভারির সময় দূরত্ব ভুল পেলে <strong>"দূরত্ব সংশোধন"</strong> বাটনের মাধ্যমে তা সংশোধন করতে পারবে।
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: ADD OUTLET */}
       {showAddOutletModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
@@ -6035,6 +6377,203 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setRejectingDeposit(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN DISTANCE ADJUSTMENT (কাস্টমার ভুল দূরত্ব দিলে এডমিন কর্তৃক সংশোধন) */}
+      {adminAdjustingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-indigo-200 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center shrink-0">
+                  <Navigation className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    দূরত্ব ও ডেলিভারি চার্জ যাচাই / সংশোধন
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    অর্ডার ID: #{adminAdjustingOrder.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdminAdjustingOrder(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Order Delivery Information Details */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">গ্রাহক:</span>
+                  <span className="font-bold text-slate-900">
+                    {adminAdjustingOrder.customerName} ({adminAdjustingOrder.customerPhone})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">থানা ও ইউনিয়ন:</span>
+                  <span className="font-bold text-emerald-800">
+                    {adminAdjustingOrder.thanaNameBn || 'থানা'} • {adminAdjustingOrder.unionNameBn || 'ইউনিয়ন'}
+                  </span>
+                </div>
+                {adminAdjustingOrder.pickupPlaceName && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">দোকান/পিকআপ স্থান:</span>
+                    <span className="font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      📍 {adminAdjustingOrder.pickupPlaceName}
+                    </span>
+                  </div>
+                )}
+                <div className="pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500 block mb-0.5">গ্রাহকের সম্পূর্ণ ঠিকানা:</span>
+                  <p className="font-medium text-slate-800 bg-white p-2 rounded-xl border border-slate-200">
+                    {adminAdjustingOrder.deliveryAddress}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block">কাস্টমার নির্বাচিত দূরত্ব:</span>
+                    <span className="font-bold text-blue-900">
+                      {DISTANCE_TIER_OPTIONS.find((t) => t.id === adminAdjustingOrder.distanceTier)?.labelBn ||
+                        adminAdjustingOrder.distanceTier ||
+                        '১–২ কিমি'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block">অর্ডারের মোট ওজন:</span>
+                    <span className="font-bold text-emerald-900">
+                      {(adminAdjustingOrder.totalWeightKg ?? 1.0).toFixed(1)} কেজি
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Select Verified/Adjusted Distance Tier */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1.5">
+                  সঠিক দূরত্ব নির্বাচন করুন <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={adminAdjustTier}
+                  onChange={(e) => setAdminAdjustTier(e.target.value as DistanceTier)}
+                  className="w-full p-2.5 rounded-xl border-2 border-indigo-200 bg-white font-bold text-slate-900 focus:outline-hidden focus:border-indigo-600 cursor-pointer"
+                >
+                  {DISTANCE_TIER_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.labelBn} (ডিফল্ট চার্জ: ৳{ratesConfig.distanceRates[opt.id] ?? DEFAULT_DELIVERY_PRICING_CONFIG.distanceRates[opt.id]})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  দোকান থেকে কাস্টমারের বাড়ির প্রকৃত দূরত্ব অনুযায়ী চার্জ স্বয়ংক্রিয়ভাবে পুনঃগণনা করা হবে।
+                </p>
+              </div>
+
+              {/* Dynamic Recalculation Breakdown Preview */}
+              {(() => {
+                const preview = calculateDeliveryChargeBreakdown(
+                  adminAdjustTier,
+                  adminAdjustingOrder.totalWeightKg ?? 1.0,
+                  ratesConfig
+                );
+                const oldDeliveryFee = adminAdjustingOrder.deliveryFee;
+                const newTotalAmount =
+                  adminAdjustingOrder.subtotal +
+                  preview.totalDeliveryCharge;
+
+                return (
+                  <div className="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-200 space-y-2">
+                    <div className="flex justify-between items-center text-indigo-950 font-bold pb-2 border-b border-indigo-200/60">
+                      <span>পুনঃগণনাকৃত নতুন চার্জ প্রিভিউ</span>
+                      <span className="text-xs font-mono">
+                        মোট ওজন: {(adminAdjustingOrder.totalWeightKg ?? 1.0).toFixed(1)} কেজি
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="bg-white/80 p-2 rounded-xl">
+                        <span className="text-slate-500 block">দূরত্ব চার্জ:</span>
+                        <span className="font-bold text-slate-900">{formatBDT(preview.distanceCharge)}</span>
+                      </div>
+                      <div className="bg-white/80 p-2 rounded-xl">
+                        <span className="text-slate-500 block">ওজন চার্জ:</span>
+                        <span className="font-bold text-slate-900">{formatBDT(preview.weightCharge)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-1 text-xs">
+                      <span className="text-slate-600">আগের ডেলিভারি চার্জ:</span>
+                      <span className="line-through text-slate-400 font-mono">
+                        {formatBDT(oldDeliveryFee)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-indigo-950">নতুন ডেলিভারি চার্জ:</span>
+                      <span className="font-bold font-mono text-indigo-700 text-sm">
+                        {formatBDT(preview.totalDeliveryCharge)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-indigo-200 text-xs">
+                      <span className="font-bold text-slate-900">অর্ডারের নতুন মোট মূল্য:</span>
+                      <span className="font-black font-mono text-emerald-800 text-base">
+                        {formatBDT(newTotalAmount)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Adjustment Note Input */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  সংশোধনের কারণ / নোট (রাইডার ও গ্রাহকের অবগতির জন্য)
+                </label>
+                <input
+                  type="text"
+                  value={adminAdjustNote}
+                  onChange={(e) => setAdminAdjustNote(e.target.value)}
+                  placeholder="যেমন: কাস্টমার ভুল দূরত্ব নির্বাচন করেছিল, প্রকৃত দূরত্ব ৩ কিমি"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onAdjustOrderDistance && adminAdjustingOrder) {
+                      await onAdjustOrderDistance(
+                        adminAdjustingOrder.id,
+                        adminAdjustTier,
+                        adminAdjustNote.trim()
+                      );
+                    }
+                    setAdminAdjustingOrder(null);
+                  }}
+                  className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>দূরত্ব ও চার্জ সংরক্ষণ করুন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdminAdjustingOrder(null)}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
                 >
                   বাতিল
