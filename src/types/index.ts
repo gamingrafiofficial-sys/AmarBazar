@@ -330,11 +330,17 @@ export interface PaymentTransactionRecord {
   riderId: string;
   riderName: string;
   riderPhone: string;
-  type: 'deposit_handover' | 'rejection_adjustment';
+  type: 'deposit_handover' | 'rejection_adjustment' | 'salary_payment';
   amount: number;
   status: 'approved' | 'rejected' | 'pending';
   notes?: string;
   adminNotes?: string;
+  transactionId?: string;
+  paymentMethod?: 'bkash' | 'nagad' | 'bank' | 'cash';
+  monthPeriod?: string;
+  deliveredCount?: number;
+  cancelledCount?: number;
+  perDeliveryRate?: number;
   createdAt: string;
   processedAt?: string;
   orderIds?: string[];

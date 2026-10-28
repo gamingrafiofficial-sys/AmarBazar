@@ -108,6 +108,19 @@ interface AdminDashboardProps {
   onApproveDeposit?: (requestId: string, adminNotes?: string) => Promise<void> | void;
   onRejectDeposit?: (requestId: string, adminNotes?: string) => Promise<void> | void;
   onMarkFakeOrder?: (orderId: string, reason: string) => Promise<void> | void;
+  onPayRiderSalary?: (
+    riderId: string,
+    payload: {
+      amount: number;
+      transactionId: string;
+      paymentMethod: 'bkash' | 'nagad' | 'bank' | 'cash';
+      monthPeriod: string;
+      deliveredCount: number;
+      cancelledCount: number;
+      perDeliveryRate?: number;
+      notes?: string;
+    }
+  ) => Promise<void> | void;
   onSendMessage?: (orderId: string, text: string) => Promise<void>;
   onUpdateOrderNote?: (orderId: string, notes: string) => Promise<void>;
   onLogout?: () => void;
@@ -125,6 +138,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   pricingConfig = DEFAULT_DELIVERY_PRICING_CONFIG,
   onUpdatePricingConfig,
   onAdjustOrderDistance,
+  onPayRiderSalary,
   onAddProduct,
   onUpdateProduct,
   onToggleProductPrivate,
@@ -182,11 +196,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     | 'transactions'
     | 'outlet'
     | 'pricing_rates'
+    | 'rider_payments'
   >('summary');
 
   // Pricing & Weight Rates State
   const [ratesConfig, setRatesConfig] = useState<DeliveryPricingConfig>(() => pricingConfig || DEFAULT_DELIVERY_PRICING_CONFIG);
   const [ratesSuccessMsg, setRatesSuccessMsg] = useState<string>('');
+
+  // Rider Monthly Salary & Payment State
+  const [selectedSalaryMonth, setSelectedSalaryMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [ratePerParcel, setRatePerParcel] = useState<number>(40);
+  const [salarySearch, setSalarySearch] = useState<string>('');
+  const [salaryStatusFilter, setSalaryStatusFilter] = useState<'all' | 'paid' | 'pending'>('all');
+  const [payingRiderSalary, setPayingRiderSalary] = useState<{
+    rider: DeliveryRiderAccount;
+    deliveredCount: number;
+    cancelledCount: number;
+    calculatedSalary: number;
+  } | null>(null);
+  const [salaryAmountInput, setSalaryAmountInput] = useState<number>(0);
+  const [salaryTrxIdInput, setSalaryTrxIdInput] = useState<string>('');
+  const [salaryMethodInput, setSalaryMethodInput] = useState<'bkash' | 'nagad' | 'bank' | 'cash'>('bkash');
+  const [salaryNotesInput, setSalaryNotesInput] = useState<string>('');
+  const [isSubmittingSalary, setIsSubmittingSalary] = useState<boolean>(false);
+  const [salarySuccessAlert, setSalarySuccessAlert] = useState<string>('');
+  const [viewingSalaryReceipt, setViewingSalaryReceipt] = useState<PaymentTransactionRecord | null>(null);
 
   // Admin Order Distance Adjustment Modal State
   const [adminAdjustingOrder, setAdminAdjustingOrder] = useState<Order | null>(null);
@@ -512,6 +549,107 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (tx.adminNotes && tx.adminNotes.toLowerCase().includes(q))
     );
   });
+
+  // Available Months for Salary Selection (current month, last 6 months)
+  const availableSalaryMonths = React.useMemo(() => {
+    const list: { id: string; labelBn: string; labelEn: string }[] = [];
+    const now = new Date();
+    const bnMonths = [
+      'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+      'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+    ];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthNum = d.getMonth() + 1;
+      const monthStr = String(monthNum).padStart(2, '0');
+      const id = `${year}-${monthStr}`;
+      const labelBn = `${bnMonths[d.getMonth()]} ${year}`;
+      const labelEn = `${d.toLocaleString('default', { month: 'long' })} ${year}`;
+      list.push({ id, labelBn, labelEn });
+    }
+    return list;
+  }, []);
+
+  // Compute Rider Monthly Delivery, Cancellation, and Salary Stats
+  const riderSalaryStats = React.useMemo(() => {
+    return registeredRiders.map((rider) => {
+      const riderOrders = orders.filter((o) => o.riderId === rider.id);
+
+      // Orders delivered in this selected month
+      const deliveredOrders = riderOrders.filter((o) => {
+        if (o.orderStatus !== 'delivered') return false;
+        const dStr = o.updatedAt || o.createdAt || '';
+        return dStr.startsWith(selectedSalaryMonth);
+      });
+
+      // Orders cancelled in this selected month
+      const cancelledOrders = riderOrders.filter((o) => {
+        const isCancelled = o.orderStatus === 'cancelled' || o.isRiderCancelled;
+        if (!isCancelled) return false;
+        const dStr = o.updatedAt || o.createdAt || '';
+        return dStr.startsWith(selectedSalaryMonth);
+      });
+
+      const deliveredCount = deliveredOrders.length;
+      const cancelledCount = cancelledOrders.length;
+      const calculatedSalary = deliveredCount * ratePerParcel;
+
+      // Check if already paid in paymentTransactions
+      const paymentTx = (paymentTransactions || []).find(
+        (tx) =>
+          tx.type === 'salary_payment' &&
+          tx.riderId === rider.id &&
+          tx.monthPeriod === selectedSalaryMonth &&
+          tx.status === 'approved'
+      );
+
+      const isPaid = !!paymentTx;
+
+      return {
+        rider,
+        deliveredCount,
+        cancelledCount,
+        calculatedSalary,
+        isPaid,
+        paymentTx,
+      };
+    });
+  }, [registeredRiders, orders, selectedSalaryMonth, ratePerParcel, paymentTransactions]);
+
+  // Filtered list based on search and status
+  const filteredRiderSalaryStats = React.useMemo(() => {
+    return riderSalaryStats.filter((item) => {
+      if (salaryStatusFilter === 'paid' && !item.isPaid) return false;
+      if (salaryStatusFilter === 'pending' && item.isPaid) return false;
+      if (!salarySearch.trim()) return true;
+      const q = salarySearch.toLowerCase().trim();
+      return (
+        item.rider.name.toLowerCase().includes(q) ||
+        item.rider.phone.includes(q) ||
+        (item.rider.area && item.rider.area.toLowerCase().includes(q))
+      );
+    });
+  }, [riderSalaryStats, salaryStatusFilter, salarySearch]);
+
+  // Aggregate monthly salary KPI metrics
+  const monthlySalaryTotals = React.useMemo(() => {
+    const totalDelivered = riderSalaryStats.reduce((sum, r) => sum + r.deliveredCount, 0);
+    const totalCancelled = riderSalaryStats.reduce((sum, r) => sum + r.cancelledCount, 0);
+    const totalPayable = riderSalaryStats.reduce((sum, r) => sum + r.calculatedSalary, 0);
+    const totalPaid = riderSalaryStats
+      .filter((r) => r.isPaid)
+      .reduce((sum, r) => sum + (r.paymentTx?.amount || r.calculatedSalary), 0);
+    const pendingCount = riderSalaryStats.filter((r) => !r.isPaid && r.deliveredCount > 0).length;
+
+    return {
+      totalDelivered,
+      totalCancelled,
+      totalPayable,
+      totalPaid,
+      pendingCount,
+    };
+  }, [riderSalaryStats]);
 
   // Filtered orders for Summary Overview based on Time Range (today, month, all)
   const filteredSummaryOrders = React.useMemo(() => {
@@ -1534,6 +1672,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
             {language === 'bn' ? 'ডেলিভারি চার্জ ও ওজন রেট' : 'Pricing Rates'}
+          </span>
+        </button>
+
+        {/* Box 14: Rider Salary & Payments (রাইডার বেতন ও পেমেন্ট) */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('rider_payments')}
+          className={`relative flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer min-h-[78px] sm:min-h-[86px] group ${
+            activeTab === 'rider_payments'
+              ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-2 ring-emerald-500/25'
+              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-2xs hover:shadow-xs'
+          }`}
+        >
+          <div
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center mb-1 transition-transform group-hover:scale-105 ${
+              activeTab === 'rider_payments'
+                ? 'bg-emerald-800 text-white'
+                : 'bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold leading-tight line-clamp-2 px-0.5">
+            {language === 'bn' ? 'রাইডার বেতন ও পেমেন্ট' : 'Rider Salary'}
           </span>
         </button>
       </div>
@@ -4488,7 +4650,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span className="text-[10px] text-slate-400 font-mono">{tx.riderPhone}</span>
                         </td>
                         <td className="py-3 px-4">
-                          {tx.type === 'deposit_handover' ? (
+                          {tx.type === 'salary_payment' ? (
+                            <div className="space-y-0.5">
+                              <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 text-[11px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                                <DollarSign className="w-3 h-3 text-indigo-700" />
+                                <span>রাইডার বেতন পরিশোধ</span>
+                              </span>
+                              {tx.transactionId && (
+                                <span className="block text-[10px] font-mono font-bold text-indigo-700">
+                                  TrxID: {tx.transactionId}
+                                </span>
+                              )}
+                              {tx.monthPeriod && (
+                                <span className="block text-[10px] text-slate-500 font-semibold">
+                                  মাস: {tx.monthPeriod}
+                                </span>
+                              )}
+                            </div>
+                          ) : tx.type === 'deposit_handover' ? (
                             <span className="bg-emerald-50 text-emerald-800 text-[11px] font-bold px-2 py-0.5 rounded-md border border-emerald-200">
                               অফিস ক্যাশ ডিপোজিট
                             </span>
@@ -4499,7 +4678,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-black text-sm">
-                          {tx.status === 'approved' ? (
+                          {tx.type === 'salary_payment' ? (
+                            <span className="text-indigo-700 font-black">
+                              - {formatBDT(tx.amount)}
+                            </span>
+                          ) : tx.status === 'approved' ? (
                             <span className="text-emerald-700">+{formatBDT(tx.amount)}</span>
                           ) : (
                             <span className="text-rose-700">৳0 (বাতিল)</span>
@@ -4508,7 +4691,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="py-3 px-4">
                           {tx.status === 'approved' ? (
                             <span className="bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                              অনুমোদিত
+                              {tx.type === 'salary_payment' ? 'পরিশোধিত (Paid)' : 'অনুমোদিত'}
                             </span>
                           ) : (
                             <span className="bg-rose-100 text-rose-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -4516,8 +4699,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-[11px] text-slate-700">
-                          {tx.adminNotes || tx.notes || '—'}
+                        <td className="py-3 px-4 text-slate-500">
+                          {tx.type === 'salary_payment' && tx.deliveredCount !== undefined ? (
+                            <div className="space-y-0.5">
+                              <span className="text-slate-800 font-semibold block">
+                                {tx.deliveredCount} টি ডেলিভারি পার্সেল
+                                {tx.cancelledCount ? ` • ${tx.cancelledCount} টি বাতিল` : ''}
+                              </span>
+                              <span className="text-[11px] text-slate-500 block">
+                                মাধ্যম: {tx.paymentMethod ? (tx.paymentMethod === 'bkash' ? 'বিকাশ' : tx.paymentMethod === 'nagad' ? 'নগদ' : tx.paymentMethod === 'bank' ? 'ব্যাংক' : 'ক্যাশ') : 'অনলাইন'}
+                                {tx.notes ? ` • ${tx.notes}` : ''}
+                              </span>
+                            </div>
+                          ) : (
+                            tx.adminNotes || tx.notes || '—'
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -4945,6 +5141,354 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               সর্বমোট ডেলিভারি চার্জ = দূরত্ব চার্জ + ওজন অতিরিক্ত চার্জ + স্পেশাল হ্যান্ডলিং ফি।
               কাস্টমার অর্ডার দেওয়ার সময় আনুমানিক দূরত্ব নির্বাচন করবে। রাইডার বা এডমিন ডেলিভারির সময় দূরত্ব ভুল পেলে <strong>"দূরত্ব সংশোধন"</strong> বাটনের মাধ্যমে তা সংশোধন করতে পারবে।
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: RIDER PAYMENTS & SALARY (রাইডার মাসিক ডেলিভারি ও বেতন পরিশোধ) */}
+      {activeTab === 'rider_payments' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Card with Month Selector & Rate Setting */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="p-2 rounded-2xl bg-indigo-100 text-indigo-800">
+                  <DollarSign className="w-5 h-5" />
+                </span>
+                <h2 className="text-base sm:text-lg font-black text-slate-900">
+                  {language === 'bn' ? 'রাইডার মাসিক পার্সেল ডেলিভারি ও বেতন সিস্টেম' : 'Rider Monthly Delivery & Salary System'}
+                </h2>
+                <span className="bg-emerald-100 text-emerald-900 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  সক্রিয় পে-রোল
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {language === 'bn'
+                  ? 'প্রতিটি রাইডার নির্দিষ্ট মাসে কয়টি পার্সেল ডেলিভারি করেছে এবং কয়টি বাতিল হয়েছে তার হিসাব অনুযায়ী বেতন পরিশোধ করুন।'
+                  : 'Track monthly deliveries, cancellations, calculate salaries, and disburse payouts with Trx ID.'}
+              </p>
+            </div>
+
+            {/* Controls: Month Filter & Rate per parcel */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Month Dropdown */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-2xl">
+                <Calendar className="w-4 h-4 text-slate-500" />
+                <span className="text-[11px] font-bold text-slate-600">মাস:</span>
+                <select
+                  value={selectedSalaryMonth}
+                  onChange={(e) => setSelectedSalaryMonth(e.target.value)}
+                  className="bg-transparent font-bold text-xs text-slate-900 focus:outline-hidden cursor-pointer"
+                >
+                  {availableSalaryMonths.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.labelBn}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Delivery Commission / Rate Per Parcel */}
+              <div className="flex items-center gap-1.5 bg-indigo-50/70 border border-indigo-200 px-3 py-1.5 rounded-2xl">
+                <Scale className="w-4 h-4 text-indigo-600" />
+                <span className="text-[11px] font-bold text-indigo-950">পার্সেল প্রতি বেতন:</span>
+                <span className="text-xs font-bold text-indigo-900">৳</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={ratePerParcel}
+                  onChange={(e) => setRatePerParcel(Math.max(0, Number(e.target.value) || 0))}
+                  className="w-14 bg-white border border-indigo-300 rounded-lg px-1.5 py-0.5 text-xs font-black text-indigo-950 text-right focus:outline-hidden"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Success Notice */}
+          {salarySuccessAlert && (
+            <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-950 text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>{salarySuccessAlert}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSalarySuccessAlert('')}
+                className="text-emerald-700 hover:text-emerald-900 font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* KPI Stat Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {/* Card 1: Total Delivered */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] font-bold text-slate-500 block">মোট ডেলিভারি পার্সেল</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-800 mt-1 block">
+                {monthlySalaryTotals.totalDelivered} টি
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                নির্বাচিত মাসে সফল ডেলিভারি
+              </span>
+            </div>
+
+            {/* Card 2: Total Cancelled */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] font-bold text-slate-500 block">মোট বাতিল পার্সেল</span>
+              <span className="text-xl sm:text-2xl font-black text-rose-700 mt-1 block">
+                {monthlySalaryTotals.totalCancelled} টি
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                রাইডার বা গ্রাহক কর্তৃক বাতিল
+              </span>
+            </div>
+
+            {/* Card 3: Total Payable Salary */}
+            <div className="bg-white p-4 rounded-2xl border border-indigo-200 shadow-2xs">
+              <span className="text-[11px] font-bold text-indigo-900 block">মোট প্রদেয় বেতন (৳)</span>
+              <span className="text-xl sm:text-2xl font-black text-indigo-900 mt-1 block">
+                {formatBDT(monthlySalaryTotals.totalPayable)}
+              </span>
+              <span className="text-[10px] text-indigo-700 mt-0.5 block">
+                হিসাব: {monthlySalaryTotals.totalDelivered} × ৳{ratePerParcel}
+              </span>
+            </div>
+
+            {/* Card 4: Total Paid Salary */}
+            <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-2xs">
+              <span className="text-[11px] font-bold text-emerald-900 block">মোট পরিশোধিত বেতন</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-700 mt-1 block">
+                {formatBDT(monthlySalaryTotals.totalPaid)}
+              </span>
+              <span className="text-[10px] text-emerald-600 mt-0.5 block">
+                Trx ID সহ ইতিমধ্যে পরিশোধিত
+              </span>
+            </div>
+
+            {/* Card 5: Pending Payouts */}
+            <div className="bg-white p-4 rounded-2xl border border-amber-200 shadow-2xs col-span-2 lg:col-span-1">
+              <span className="text-[11px] font-bold text-amber-900 block">বকেয়া রাইডার সংখ্যা</span>
+              <span className="text-xl sm:text-2xl font-black text-amber-800 mt-1 block">
+                {monthlySalaryTotals.pendingCount} জন
+              </span>
+              <span className="text-[10px] text-amber-700 mt-0.5 block">
+                বেতন পরিশোধ অপেক্ষমান
+              </span>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="রাইডারের নাম, ফোন বা এরিয়া খুঁজুন..."
+                value={salarySearch}
+                onChange={(e) => setSalarySearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-hidden focus:border-indigo-600"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 self-end sm:self-auto text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setSalaryStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  salaryStatusFilter === 'all'
+                    ? 'bg-indigo-700 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                সকল ({riderSalaryStats.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSalaryStatusFilter('pending')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  salaryStatusFilter === 'pending'
+                    ? 'bg-amber-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                বকেয়া ({riderSalaryStats.filter((r) => !r.isPaid).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSalaryStatusFilter('paid')}
+                className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  salaryStatusFilter === 'paid'
+                    ? 'bg-emerald-700 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                পরিশোধিত ({riderSalaryStats.filter((r) => r.isPaid).length})
+              </button>
+            </div>
+          </div>
+
+          {/* Riders Salary List Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredRiderSalaryStats.length === 0 ? (
+              <div className="col-span-full bg-white p-10 rounded-3xl border border-slate-200 text-center text-slate-400 text-xs">
+                কোনো রাইডার রেকর্ড পাওয়া যায়নি।
+              </div>
+            ) : (
+              filteredRiderSalaryStats.map(({ rider, deliveredCount, cancelledCount, calculatedSalary, isPaid, paymentTx }) => {
+                return (
+                  <div
+                    key={rider.id}
+                    className={`bg-white rounded-3xl border p-5 shadow-xs flex flex-col justify-between transition-all ${
+                      isPaid
+                        ? 'border-emerald-300 ring-1 ring-emerald-400/20'
+                        : deliveredCount > 0
+                        ? 'border-amber-300 ring-1 ring-amber-400/20'
+                        : 'border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      {/* Rider Header */}
+                      <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-3 gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 ${
+                            isPaid ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            <Bike className="w-5 h-5 text-emerald-700" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-extrabold text-slate-900 text-sm">{rider.name}</h3>
+                              {rider.isActive === false && (
+                                <span className="bg-rose-100 text-rose-800 text-[9px] font-bold px-1.5 py-0.2 rounded">
+                                  ডিঅ্যাক্টিভ
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span>{rider.phone}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        {isPaid ? (
+                          <div className="text-right">
+                            <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-emerald-700" />
+                              <span>Paid / পরিশোধিত</span>
+                            </span>
+                            <span className="block text-[10px] text-emerald-800 font-mono font-bold mt-0.5">
+                              {formatBDT(paymentTx?.amount || calculatedSalary)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-700" />
+                            <span>Unpaid / বকেয়া</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Performance Breakdown for Selected Month */}
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/80 mb-3 text-center">
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">মাসিক ডেলিভারি</span>
+                          <span className="text-sm font-black text-emerald-800 block mt-0.5">
+                            {deliveredCount} টি
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">মাসিক বাতিল</span>
+                          <span className="text-sm font-black text-rose-700 block mt-0.5">
+                            {cancelledCount} টি
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">প্রদেয় বেতন</span>
+                          <span className="text-sm font-black text-indigo-900 block mt-0.5">
+                            {formatBDT(calculatedSalary)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Paid Details Box if Paid */}
+                      {isPaid && paymentTx && (
+                        <div className="bg-emerald-50/70 p-3 rounded-2xl border border-emerald-200 text-xs mb-3 space-y-1">
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-emerald-900 font-bold">ট্রানজেকশন ID (TrxID):</span>
+                            <span className="font-mono font-black text-emerald-950 bg-white px-2 py-0.5 rounded border border-emerald-300">
+                              {paymentTx.transactionId || paymentTx.id}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px] text-emerald-900">
+                            <span>পেমেন্ট মাধ্যম:</span>
+                            <span className="font-semibold uppercase">
+                              {paymentTx.paymentMethod || 'bKash'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px] text-emerald-900">
+                            <span>পরিশোধের তারিখ:</span>
+                            <span className="font-mono">
+                              {new Date(paymentTx.processedAt || paymentTx.createdAt).toLocaleString('bn-BD', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })}
+                            </span>
+                          </div>
+                          {paymentTx.notes && (
+                            <p className="text-[10px] text-emerald-800/90 pt-1 border-t border-emerald-200/60 truncate">
+                              নোট: {paymentTx.notes}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Button */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-slate-400">
+                        রেট: {ratePerParcel}৳ / পার্সেল
+                      </div>
+
+                      {isPaid && paymentTx ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewingSalaryReceipt(paymentTx)}
+                          className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Receipt className="w-3.5 h-3.5 text-slate-600" />
+                          <span>রসিদ দেখুন</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={deliveredCount === 0 && calculatedSalary === 0}
+                          onClick={() => {
+                            setPayingRiderSalary({
+                              rider,
+                              deliveredCount,
+                              cancelledCount,
+                              calculatedSalary,
+                            });
+                            setSalaryAmountInput(calculatedSalary);
+                            setSalaryTrxIdInput('');
+                            setSalaryMethodInput('bkash');
+                            setSalaryNotesInput(`${availableSalaryMonths.find((m) => m.id === selectedSalaryMonth)?.labelBn || selectedSalaryMonth} মাসের ${deliveredCount} টি পার্সেল ডেলিভারি বেতন`);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <DollarSign className="w-3.5 h-3.5" />
+                          <span>বেতন পেমেন্ট করুন</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -6579,6 +7123,286 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   বাতিল
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PAY RIDER SALARY (রাইডারকে বেতন ও কমিশন পরিশোধ) */}
+      {payingRiderSalary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-indigo-200 animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center shrink-0">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    রাইডার বেতন পরিশোধ ফরম
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {availableSalaryMonths.find((m) => m.id === selectedSalaryMonth)?.labelBn || selectedSalaryMonth} মাসের পে-আউট
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPayingRiderSalary(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Rider & Delivery Summary Box */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">রাইডার নাম:</span>
+                  <span className="font-black text-slate-900">{payingRiderSalary.rider.name}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">ফোন নম্বর:</span>
+                  <span className="font-mono font-bold text-slate-800">{payingRiderSalary.rider.phone}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">নির্ধারিত থানা:</span>
+                  <span className="font-bold text-emerald-800">
+                    {payingRiderSalary.rider.thanaNameBn || markets.find((m) => m.id === payingRiderSalary.rider.area)?.nameBn || payingRiderSalary.rider.area || 'কালীগঞ্জ'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60">
+                  <div className="bg-white p-2 rounded-xl border border-slate-200 text-center">
+                    <span className="text-[10px] text-slate-500 block">সফল ডেলিভারি</span>
+                    <span className="font-black text-emerald-800 text-sm">
+                      {payingRiderSalary.deliveredCount} টি পার্সেল
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200 text-center">
+                    <span className="text-[10px] text-slate-500 block">বাতিল পার্সেল</span>
+                    <span className="font-black text-rose-700 text-sm">
+                      {payingRiderSalary.cancelledCount} টি
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-200 flex justify-between items-center">
+                  <span className="font-bold text-indigo-950">
+                    হিসাবকৃত মোট বেতন ({payingRiderSalary.deliveredCount} × ৳{ratePerParcel}):
+                  </span>
+                  <span className="font-black font-mono text-indigo-900 text-base">
+                    {formatBDT(payingRiderSalary.calculatedSalary)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Form Input: Salary Amount */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  প্রদেয় বেতন পরিমাণ (টাকা) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 font-bold text-slate-400">৳</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={salaryAmountInput}
+                    onChange={(e) => setSalaryAmountInput(Number(e.target.value) || 0)}
+                    placeholder="বেতন টাকা লিখুন"
+                    className="w-full pl-8 pr-3 py-2.5 rounded-xl border-2 border-indigo-200 text-slate-900 font-black text-sm bg-white focus:outline-hidden focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              {/* Form Input: Transaction ID */}
+              <div>
+                <label className="font-bold text-slate-800 block mb-1">
+                  Transaction ID / ট্রানজেকশন আইডি <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={salaryTrxIdInput}
+                  onChange={(e) => setSalaryTrxIdInput(e.target.value)}
+                  placeholder="যেমন: bKash TrxID (9X82937A) বা ব্যাংক রেফারেন্স নং"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-xs font-bold text-slate-900 focus:outline-hidden focus:border-indigo-600"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  এই Transaction ID টি রাইডারের ড্যাশবোর্ডে এবং অফিস ট্রানজেকশন লেজারে স্থায়ীভাবে প্রদর্শিত হবে।
+                </p>
+              </div>
+
+              {/* Form Input: Payment Method */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  পেমেন্ট মাধ্যম
+                </label>
+                <select
+                  value={salaryMethodInput}
+                  onChange={(e) => setSalaryMethodInput(e.target.value as any)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-bold text-xs text-slate-800 focus:outline-hidden focus:border-indigo-600 cursor-pointer"
+                >
+                  <option value="bkash">বিকাশ (bKash)</option>
+                  <option value="nagad">নগদ (Nagad)</option>
+                  <option value="bank">ব্যাংক ট্রান্সফার (Bank Transfer)</option>
+                  <option value="cash">নগদ ক্যাশ / অফিস ভাউচার (Cash)</option>
+                </select>
+              </div>
+
+              {/* Form Input: Notes */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  মন্তব্য / বিবরণ
+                </label>
+                <input
+                  type="text"
+                  value={salaryNotesInput}
+                  onChange={(e) => setSalaryNotesInput(e.target.value)}
+                  placeholder="যেমন: অক্টোবর ২০২৬ মাসের ডেলিভারি বেতন পরিশোধ"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isSubmittingSalary || !salaryTrxIdInput.trim() || salaryAmountInput <= 0}
+                  onClick={async () => {
+                    if (!payingRiderSalary) return;
+                    setIsSubmittingSalary(true);
+                    try {
+                      if (onPayRiderSalary) {
+                        await onPayRiderSalary(payingRiderSalary.rider.id, {
+                          amount: Number(salaryAmountInput) || 0,
+                          transactionId: salaryTrxIdInput.trim(),
+                          paymentMethod: salaryMethodInput,
+                          monthPeriod: selectedSalaryMonth,
+                          deliveredCount: payingRiderSalary.deliveredCount,
+                          cancelledCount: payingRiderSalary.cancelledCount,
+                          perDeliveryRate: ratePerParcel,
+                          notes: salaryNotesInput.trim(),
+                        });
+                      }
+                      setSalarySuccessAlert(
+                        `${payingRiderSalary.rider.name}-এর ${selectedSalaryMonth} মাসের বেতন (৳${salaryAmountInput}) সফলভাবে পরিশোধ করা হয়েছে এবং Transaction ID (${salaryTrxIdInput.trim()}) সংরক্ষিত হয়েছে!`
+                      );
+                      setTimeout(() => setSalarySuccessAlert(''), 6000);
+                      setPayingRiderSalary(null);
+                    } catch (err) {
+                      console.warn('Error paying salary:', err);
+                    } finally {
+                      setIsSubmittingSalary(false);
+                    }
+                  }}
+                  className="flex-1 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSubmittingSalary ? 'প্রসেসিং হচ্ছে...' : 'পেমেন্ট সাবমিট ও নিশ্চিত করুন'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayingRiderSalary(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VIEW SALARY RECEIPT (পরিশোধিত বেতনের রসিদ মেমো) */}
+      {viewingSalaryReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-emerald-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">রাইডার বেতন পরিশোধ রসিদ</h3>
+                  <p className="text-[11px] text-slate-500 font-mono">আইডি: #{viewingSalaryReceipt.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingSalaryReceipt(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">রাইডার নাম:</span>
+                  <span className="font-bold text-slate-900">{viewingSalaryReceipt.riderName}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">ফোন:</span>
+                  <span className="font-mono font-bold text-slate-900">{viewingSalaryReceipt.riderPhone}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-emerald-200/60">
+                  <span className="text-slate-600">পরিশোধিত বেতন:</span>
+                  <span className="font-mono font-black text-emerald-800 text-base">
+                    {formatBDT(viewingSalaryReceipt.amount)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">Transaction ID (TrxID):</span>
+                  <span className="font-mono font-bold text-emerald-950 bg-white px-2 py-0.5 rounded border border-emerald-300">
+                    {viewingSalaryReceipt.transactionId || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">পেমেন্ট মাধ্যম:</span>
+                  <span className="font-bold uppercase text-slate-800">
+                    {viewingSalaryReceipt.paymentMethod || 'বিকাশ'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">মাস:</span>
+                  <span className="font-bold text-slate-800">{viewingSalaryReceipt.monthPeriod || 'চলতি মাস'}</span>
+                </div>
+                {viewingSalaryReceipt.deliveredCount !== undefined && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">ডেলিভারি বিবরণ:</span>
+                    <span className="font-bold text-emerald-800">
+                      {viewingSalaryReceipt.deliveredCount} টি পার্সেল
+                      {viewingSalaryReceipt.cancelledCount ? ` (${viewingSalaryReceipt.cancelledCount} টি বাতিল)` : ''}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">তারিখ ও সময়:</span>
+                  <span className="font-mono text-slate-700">
+                    {new Date(viewingSalaryReceipt.processedAt || viewingSalaryReceipt.createdAt).toLocaleString('bn-BD', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              {viewingSalaryReceipt.notes && (
+                <p className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  নোট: {viewingSalaryReceipt.notes}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setViewingSalaryReceipt(null)}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl cursor-pointer transition-colors"
+              >
+                বন্ধ করুন
+              </button>
             </div>
           </div>
         </div>

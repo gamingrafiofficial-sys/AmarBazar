@@ -1236,6 +1236,32 @@ app.post('/api/admin/record-handover', (req, res) => {
   res.json({ success: true, entry });
 });
 
+// Admin: Record Rider Salary Payment
+app.post('/api/admin/salary/pay', (req, res) => {
+  const payload = req.body;
+  if (!payload || !payload.riderId || !payload.amount) {
+    return res.status(400).json({ error: 'Invalid salary parameters.' });
+  }
+
+  const now = new Date().toISOString();
+  const entry: LedgerEntry = {
+    id: `ledger-salary-${Date.now()}`,
+    orderId: 'SALARY_PAYOUT',
+    type: 'rider_payout',
+    debitAccount: `rider_salary:${payload.riderId}`,
+    creditAccount: 'platform_cash_settlement',
+    amount: Number(payload.amount),
+    currency: 'BDT',
+    notes: `Rider salary for ${payload.monthPeriod || 'month'} (TrxID: ${payload.transactionId || 'N/A'})`,
+    createdAt: now,
+  };
+
+  inMemoryDB.ledger.push(entry);
+  savePersistentStore();
+
+  res.json({ success: true, entry });
+});
+
 // Order Messaging: Send message on an order (Customer, Rider, or Admin)
 app.post('/api/orders/:orderId/messages', (req, res) => {
   try {

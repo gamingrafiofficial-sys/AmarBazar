@@ -48,6 +48,35 @@ const DEPOSITS_COL = 'deposit_requests';
 const TRANSACTIONS_COL = 'transactions';
 
 /**
+ * Recursively removes all keys with `undefined` values from an object or array,
+ * preventing Firestore updateDoc/setDoc from throwing:
+ * "Unsupported field value: undefined"
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    if (data instanceof Date) {
+      return data;
+    }
+    const sanitized: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data as Record<string, any>)) {
+      if (val !== undefined) {
+        sanitized[key] = sanitizeForFirestore(val);
+      }
+    }
+    return sanitized as T;
+  }
+  return data;
+}
+
+/**
  * Initializes Firestore with seed data if collections are empty.
  * Runs once safely without overwriting live user data.
  */
@@ -355,7 +384,8 @@ export function subscribeToOrdersOnline(
 
 export async function createOrderOnline(order: Order): Promise<void> {
   try {
-    await setDoc(doc(db, ORDERS_COL, order.id), order);
+    const sanitizedOrder = sanitizeForFirestore(order);
+    await setDoc(doc(db, ORDERS_COL, order.id), sanitizedOrder);
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${ORDERS_COL}/${order.id}`);
   }
@@ -364,10 +394,11 @@ export async function createOrderOnline(order: Order): Promise<void> {
 export async function updateOrderOnline(orderId: string, updates: Partial<Order>): Promise<void> {
   try {
     const docRef = doc(db, ORDERS_COL, orderId);
-    await updateDoc(docRef, {
+    const sanitizedUpdates = sanitizeForFirestore({
       ...updates,
       updatedAt: new Date().toISOString(),
     });
+    await updateDoc(docRef, sanitizedUpdates);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${ORDERS_COL}/${orderId}`);
   }
@@ -640,7 +671,8 @@ export function subscribeToTransactionsOnline(
 
 export async function createTransactionOnline(record: PaymentTransactionRecord): Promise<void> {
   try {
-    await setDoc(doc(db, TRANSACTIONS_COL, record.id), record);
+    const sanitized = sanitizeForFirestore(record);
+    await setDoc(doc(db, TRANSACTIONS_COL, record.id), sanitized);
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `${TRANSACTIONS_COL}/${record.id}`);
   }

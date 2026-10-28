@@ -804,11 +804,12 @@ function MarketplaceMain() {
   // State Transition (e.g. picked up, delivered)
   const handleTransitionOrder = async (orderId: string, targetStatus: OrderStatus, reason?: string) => {
     try {
-      await updateOrderOnline(orderId, {
+      const orderUpdates: Partial<Order> = {
         orderStatus: targetStatus,
-        paymentStatus: targetStatus === 'delivered' ? 'collected' : undefined,
+        ...(targetStatus === 'delivered' ? { paymentStatus: 'collected' } : {}),
         ...(reason ? { failureReason: reason } : {}),
-      });
+      };
+      await updateOrderOnline(orderId, orderUpdates);
       await fetch('/api/orders/transition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -828,6 +829,7 @@ function MarketplaceMain() {
               ...o,
               orderStatus: targetStatus,
               paymentStatus: targetStatus === 'delivered' ? 'collected' : o.paymentStatus,
+              ...(reason ? { failureReason: reason } : {}),
               updatedAt: new Date().toISOString(),
             }
           : o
@@ -839,20 +841,21 @@ function MarketplaceMain() {
   const handleAdminAssignRider = async (orderId: string, riderId: string) => {
     const selectedRider = registeredRiders.find((r) => r.id === riderId);
     try {
-      await updateOrderOnline(orderId, {
+      const assignUpdates: Partial<Order> = {
         riderId,
-        riderName: selectedRider?.name,
-        riderPhone: selectedRider?.phone,
         orderStatus: 'rider_assigned',
-      });
+        ...(selectedRider?.name ? { riderName: selectedRider.name } : {}),
+        ...(selectedRider?.phone ? { riderPhone: selectedRider.phone } : {}),
+      };
+      await updateOrderOnline(orderId, assignUpdates);
       await fetch('/api/admin/assign-rider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderId,
           riderId,
-          riderName: selectedRider?.name,
-          riderPhone: selectedRider?.phone,
+          riderName: selectedRider?.name || '',
+          riderPhone: selectedRider?.phone || '',
         }),
       });
     } catch {}
@@ -1117,6 +1120,60 @@ function MarketplaceMain() {
       });
     } catch (err) {
       console.warn('Error syncing rider active state to server:', err);
+    }
+  };
+
+  // Admin Pays Rider Salary
+  const handlePayRiderSalary = async (
+    riderId: string,
+    payload: {
+      amount: number;
+      transactionId: string;
+      paymentMethod: 'bkash' | 'nagad' | 'bank' | 'cash';
+      monthPeriod: string;
+      deliveredCount: number;
+      cancelledCount: number;
+      perDeliveryRate?: number;
+      notes?: string;
+    }
+  ) => {
+    const rider = registeredRiders.find((r) => r.id === riderId);
+    const newTx: PaymentTransactionRecord = {
+      id: `tx-sal-${Date.now()}`,
+      riderId,
+      riderName: rider?.name || 'রাইডার',
+      riderPhone: rider?.phone || '',
+      type: 'salary_payment',
+      amount: payload.amount,
+      status: 'approved',
+      transactionId: payload.transactionId,
+      paymentMethod: payload.paymentMethod,
+      monthPeriod: payload.monthPeriod,
+      deliveredCount: payload.deliveredCount,
+      cancelledCount: payload.cancelledCount,
+      perDeliveryRate: payload.perDeliveryRate,
+      notes: payload.notes || `${payload.monthPeriod} মাসের পার্সেল ডেলিভারি বেতন পরিশোধ`,
+      createdAt: new Date().toISOString(),
+      processedAt: new Date().toISOString(),
+    };
+
+    // Optimistic UI update
+    setPaymentTransactions((prev) => [newTx, ...prev.filter((t) => t.id !== newTx.id)]);
+
+    try {
+      await createTransactionOnline(newTx);
+    } catch (err) {
+      console.warn('Error saving salary transaction to Firestore:', err);
+    }
+
+    try {
+      await fetch('/api/admin/salary/pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTx),
+      });
+    } catch (err) {
+      // Offline fallback
     }
   };
 
@@ -1773,6 +1830,7 @@ function MarketplaceMain() {
             onApproveDeposit={handleApproveDeposit}
             onRejectDeposit={handleRejectDeposit}
             onMarkFakeOrder={handleMarkFakeOrder}
+            onPayRiderSalary={handlePayRiderSalary}
             onSendMessage={handleSendMessage}
             onUpdateOrderNote={handleUpdateOrderNote}
             onLogout={handleLogout}

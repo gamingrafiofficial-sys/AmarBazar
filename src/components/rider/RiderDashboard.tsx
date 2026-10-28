@@ -53,6 +53,8 @@ import {
   Package,
   Scale,
   SlidersHorizontal,
+  DollarSign,
+  Receipt,
 } from 'lucide-react';
 
 interface RiderDashboardProps {
@@ -285,6 +287,50 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
     const split = calculateOrderFinancialSplit(o);
     return sum + split.riderPayout;
   }, 0);
+
+  // Current month string (e.g. "2026-10")
+  const currentMonthKey = React.useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  // Filter all salary payments received by this rider
+  const mySalaryTransactions = React.useMemo(() => {
+    return (paymentTransactions || [])
+      .filter(
+        (tx) =>
+          tx.type === 'salary_payment' &&
+          (tx.riderId === rider.id || tx.riderPhone === rider.phone)
+      )
+      .sort((a, b) => new Date(b.processedAt || b.createdAt).getTime() - new Date(a.processedAt || a.createdAt).getTime());
+  }, [paymentTransactions, rider]);
+
+  // Current month's salary payment record if already paid
+  const currentMonthSalaryPayment = React.useMemo(() => {
+    return mySalaryTransactions.find(
+      (tx) => tx.monthPeriod === currentMonthKey && tx.status === 'approved'
+    );
+  }, [mySalaryTransactions, currentMonthKey]);
+
+  // Rider's parcels delivered in the current month
+  const currentMonthDeliveredParcels = React.useMemo(() => {
+    return allOrders.filter((o) => {
+      if (o.riderId !== rider.id || o.orderStatus !== 'delivered') return false;
+      const dStr = o.updatedAt || o.createdAt || '';
+      return dStr.startsWith(currentMonthKey);
+    });
+  }, [allOrders, rider.id, currentMonthKey]);
+
+  // Rider's parcels cancelled in the current month
+  const currentMonthCancelledParcels = React.useMemo(() => {
+    return allOrders.filter((o) => {
+      if (o.riderId !== rider.id) return false;
+      const isCancelled = o.orderStatus === 'cancelled' || o.isRiderCancelled;
+      if (!isCancelled) return false;
+      const dStr = o.updatedAt || o.createdAt || '';
+      return dStr.startsWith(currentMonthKey);
+    });
+  }, [allOrders, rider.id, currentMonthKey]);
 
   // Filter this rider's deposit requests
   const myDepositRequests = (depositRequests || []).filter((d) => d.riderId === rider.id);
@@ -724,6 +770,186 @@ export const RiderDashboard: React.FC<RiderDashboardProps> = ({
           </div>
           <ArrowRight className="w-4 h-4 text-amber-700 group-hover:translate-x-1 transition-transform" />
         </button>
+      </div>
+
+      {/* SECTION: RIDER SALARY & PAYMENTS (আমার মাসিক বেতন ও কমিশন হিসাব) */}
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-indigo-200 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="p-2 rounded-2xl bg-indigo-100 text-indigo-800">
+                <DollarSign className="w-4 h-4" />
+              </span>
+              <h2 className="text-base font-extrabold text-slate-900">
+                {language === 'bn' ? 'আমার মাসিক বেতন ও পেমেন্ট হিসাব' : 'My Monthly Salary & Payments'}
+              </h2>
+              <span className="bg-indigo-100 text-indigo-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                পে-আউট
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {language === 'bn'
+                ? 'মাসিক সফল ডেলিভারি পার্সেল সংখ্যা এবং অফিস থেকে প্রেরিত বেতনের ট্রানজাকশন আইডি (TrxID) হিসাব'
+                : 'Your monthly deliveries, earnings, and salary payment transactions with Trx ID'}
+            </p>
+          </div>
+
+          {currentMonthSalaryPayment ? (
+            <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-black px-3 py-1.5 rounded-2xl inline-flex items-center gap-1.5 self-start sm:self-auto">
+              <CheckCircle className="w-4 h-4 text-emerald-700" />
+              <span>চলতি মাসের বেতন পরিশোধিত (Paid)</span>
+            </span>
+          ) : (
+            <span className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black px-3 py-1.5 rounded-2xl inline-flex items-center gap-1.5 self-start sm:self-auto">
+              <Clock className="w-4 h-4 text-amber-700" />
+              <span>চলতি মাসের বেতন প্রসেসিং চলছে</span>
+            </span>
+          )}
+        </div>
+
+        {/* Current Month Delivery Performance & Salary Card */}
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div className="bg-white p-3 rounded-xl border border-slate-200/80">
+            <span className="text-[10px] text-slate-500 font-bold block">চলতি মাসে ডেলিভারি</span>
+            <span className="text-lg sm:text-xl font-black text-emerald-800 block mt-0.5">
+              {currentMonthDeliveredParcels.length} টি
+            </span>
+            <span className="text-[9px] text-slate-400">সফল পার্সেল</span>
+          </div>
+
+          <div className="bg-white p-3 rounded-xl border border-slate-200/80">
+            <span className="text-[10px] text-slate-500 font-bold block">চলতি মাসে বাতিল</span>
+            <span className="text-lg sm:text-xl font-black text-rose-700 block mt-0.5">
+              {currentMonthCancelledParcels.length} টি
+            </span>
+            <span className="text-[9px] text-slate-400">ক্যান্সেল পার্সেল</span>
+          </div>
+
+          <div className="bg-white p-3 rounded-xl border border-indigo-200 text-center col-span-2 sm:col-span-2">
+            <span className="text-[10px] text-indigo-900 font-bold block">
+              {currentMonthSalaryPayment ? 'পরিশোধিত বেতন' : 'অফিস কর্তৃক প্রদেয় বেতন'}
+            </span>
+            <span className="text-lg sm:text-xl font-black text-indigo-900 block mt-0.5">
+              {currentMonthSalaryPayment
+                ? formatBDT(currentMonthSalaryPayment.amount)
+                : formatBDT(currentMonthDeliveredParcels.length * 40)}
+            </span>
+            <span className="text-[9px] text-slate-500">
+              {currentMonthSalaryPayment
+                ? `TrxID: ${currentMonthSalaryPayment.transactionId || currentMonthSalaryPayment.id}`
+                : `প্রতি পার্সেল আনুমানিক ৳৪০ হারে হিসাব`}
+            </span>
+          </div>
+        </div>
+
+        {/* Active Payment Banner if Paid */}
+        {currentMonthSalaryPayment && (
+          <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-300 text-emerald-950 text-xs space-y-1.5 animate-in fade-in">
+            <div className="flex items-center justify-between font-bold">
+              <span className="flex items-center gap-1.5 text-emerald-900">
+                <CheckCircle className="w-4 h-4 text-emerald-700" />
+                <span>আপনার চলতি মাসের বেতন অফিস থেকে সফলভাবে বিকাশ/নগদে পাঠানো হয়েছে!</span>
+              </span>
+              <span className="bg-emerald-700 text-white font-mono px-2 py-0.5 rounded-lg text-[10px]">
+                {formatBDT(currentMonthSalaryPayment.amount)}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-200/70 text-[11px]">
+              <div>
+                <span className="text-emerald-800 font-semibold">ট্রানজেকশন আইডি (TrxID):</span>
+                <span className="font-mono font-black text-emerald-950 block bg-white px-2 py-0.5 rounded border border-emerald-200 mt-0.5">
+                  {currentMonthSalaryPayment.transactionId || currentMonthSalaryPayment.id}
+                </span>
+              </div>
+              <div>
+                <span className="text-emerald-800 font-semibold">পেমেন্ট মাধ্যম:</span>
+                <span className="font-bold uppercase text-emerald-950 block mt-0.5">
+                  {currentMonthSalaryPayment.paymentMethod || 'bKash'}
+                </span>
+              </div>
+              <div>
+                <span className="text-emerald-800 font-semibold">পরিশোধের তারিখ:</span>
+                <span className="font-mono text-emerald-900 block mt-0.5">
+                  {new Date(currentMonthSalaryPayment.processedAt || currentMonthSalaryPayment.createdAt).toLocaleString('bn-BD', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
+                </span>
+              </div>
+            </div>
+            {currentMonthSalaryPayment.notes && (
+              <p className="text-[10px] text-emerald-800 italic pt-1">
+                অফিস নোট: {currentMonthSalaryPayment.notes}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Previous Salary Payment History Table / List */}
+        <div>
+          <h4 className="text-xs font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+            <Receipt className="w-3.5 h-3.5 text-slate-600" />
+            <span>সকল প্রাপ্ত বেতনের ট্রানজাকশন হিস্ট্রি ({mySalaryTransactions.length})</span>
+          </h4>
+
+          {mySalaryTransactions.length === 0 ? (
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
+              এখনও কোনো বেতনের ট্রানজাকশন হিস্ট্রি তৈরি হয়নি। অফিস থেকে বেতন পাঠানোর সাথে সাথে TrxID সহ এখানে যুক্ত হবে।
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {mySalaryTransactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="p-3.5 bg-slate-50 hover:bg-white rounded-2xl border border-slate-200 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-2 py-0.5 rounded-full text-[10px]">
+                        Paid
+                      </span>
+                      <span className="font-bold text-slate-900">
+                        {tx.monthPeriod || 'মাসিক'} ডেলিভারি বেতন
+                      </span>
+                      {tx.deliveredCount !== undefined && (
+                        <span className="text-slate-500 font-semibold text-[11px]">
+                          ({tx.deliveredCount} টি পার্সেল)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                      <span className="font-mono text-indigo-900 font-bold">
+                        TrxID: {tx.transactionId || tx.id}
+                      </span>
+                      <span>•</span>
+                      <span className="uppercase font-semibold">
+                        মাধ্যম: {tx.paymentMethod || 'অনলাইন'}
+                      </span>
+                      <span>•</span>
+                      <span className="font-mono">
+                        {new Date(tx.processedAt || tx.createdAt).toLocaleDateString('bn-BD')}
+                      </span>
+                    </div>
+                    {tx.notes && (
+                      <p className="text-[10px] text-slate-400">
+                        নোট: {tx.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="text-right sm:text-right shrink-0">
+                    <span className="font-black font-mono text-emerald-700 text-sm block">
+                      +{formatBDT(tx.amount)}
+                    </span>
+                    <span className="text-[10px] text-emerald-800 font-semibold">
+                      পরিশোধ সম্পন্ন
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* SECTION 4: CASH DEPOSIT REQUESTS & OFFICE MEMOS */}
